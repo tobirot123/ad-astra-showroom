@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1100" viewBox="0 0 800 1100" role="img" aria-label="Fachada del emprendimiento ALBA">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d9e4ea"/>
+      <stop offset="1" stop-color="#f3efe6"/>
+    </linearGradient>
+    <linearGradient id="stone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f1e7"/>
+      <stop offset="1" stop-color="#e4d8c8"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c5d5df"/>
+      <stop offset="1" stop-color="#8eabbc"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="1100" fill="url(#sky)"/>
+  <rect x="0" y="980" width="800" height="120" fill="#d7cfc3"/>
+  <rect x="40" y="1000" width="720" height="8" fill="#c4b6a4"/>
+  <rect x="70" y="78" width="660" height="910" rx="6" fill="url(#stone)" stroke="#c3b29a" stroke-width="2"/>
+  <rect x="90" y="48" width="620" height="40" fill="#1f1a17"/>
+  <text x="400" y="75" text-anchor="middle" fill="#f4efe6" font-family="Georgia, serif" font-size="22" letter-spacing="8">ALBA</text>
+  <rect x="300" y="930" width="200" height="58" fill="#1f1a17"/>
+  <rect x="318" y="944" width="70" height="44" fill="#8eabbc"/>
+  <rect x="412" y="944" width="70" height="44" fill="#8eabbc"/>
+  <rect x="132.8" y="146.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="184.0" y1="146.3" x2="184.0" y2="249.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="132.8" y1="198.0" x2="235.2" y2="198.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="292.8" y="146.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="344.0" y1="146.3" x2="344.0" y2="249.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="292.8" y1="198.0" x2="395.2" y2="198.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="452.8" y="146.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="504.0" y1="146.3" x2="504.0" y2="249.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="452.8" y1="198.0" x2="555.2" y2="198.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="612.8" y="146.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="664.0" y1="146.3" x2="664.0" y2="249.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="612.8" y1="198.0" x2="715.2" y2="198.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="132.8" y="311.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="184.0" y1="311.3" x2="184.0" y2="414.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="132.8" y1="363.0" x2="235.2" y2="363.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="292.8" y="311.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="344.0" y1="311.3" x2="344.0" y2="414.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="292.8" y1="363.0" x2="395.2" y2="363.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="452.8" y="311.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="504.0" y1="311.3" x2="504.0" y2="414.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="452.8" y1="363.0" x2="555.2" y2="363.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="612.8" y="311.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="664.0" y1="311.3" x2="664.0" y2="414.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="612.8" y1="363.0" x2="715.2" y2="363.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="132.8" y="476.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="184.0" y1="476.3" x2="184.0" y2="579.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="132.8" y1="528.0" x2="235.2" y2="528.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="292.8" y="476.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="344.0" y1="476.3" x2="344.0" y2="579.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="292.8" y1="528.0" x2="395.2" y2="528.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="452.8" y="476.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="504.0" y1="476.3" x2="504.0" y2="579.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="452.8" y1="528.0" x2="555.2" y2="528.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="612.8" y="476.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="664.0" y1="476.3" x2="664.0" y2="579.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="612.8" y1="528.0" x2="715.2" y2="528.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="132.8" y="641.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="184.0" y1="641.3" x2="184.0" y2="744.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="132.8" y1="693.0" x2="235.2" y2="693.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="292.8" y="641.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="344.0" y1="641.3" x2="344.0" y2="744.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="292.8" y1="693.0" x2="395.2" y2="693.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="452.8" y="641.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="504.0" y1="641.3" x2="504.0" y2="744.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="452.8" y1="693.0" x2="555.2" y2="693.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="612.8" y="641.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="664.0" y1="641.3" x2="664.0" y2="744.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="612.8" y1="693.0" x2="715.2" y2="693.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="132.8" y="806.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="184.0" y1="806.3" x2="184.0" y2="909.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="132.8" y1="858.0" x2="235.2" y2="858.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="292.8" y="806.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="344.0" y1="806.3" x2="344.0" y2="909.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="292.8" y1="858.0" x2="395.2" y2="858.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="452.8" y="806.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="504.0" y1="806.3" x2="504.0" y2="909.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="452.8" y1="858.0" x2="555.2" y2="858.0" stroke="#8d7358" stroke-width="2"/>
+<rect x="612.8" y="806.3" width="102.4" height="103.4" rx="2" fill="url(#glass)" stroke="#8d7358" stroke-width="3"/>
+      <line x1="664.0" y1="806.3" x2="664.0" y2="909.7" stroke="#8d7358" stroke-width="2"/>
+      <line x1="612.8" y1="858.0" x2="715.2" y2="858.0" stroke="#8d7358" stroke-width="2"/>
+</svg>
