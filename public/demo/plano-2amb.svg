@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="520" viewBox="0 0 800 520">
+  <rect width="800" height="520" fill="#f7f3ec"/>
+  <text x="32" y="42" font-family="Georgia, serif" font-size="22" fill="#1c1915">2 ambientes · 55,10 m²</text>
+  <g fill="none" stroke="#1c1915" stroke-width="3">
+    <rect x="40" y="70" width="470" height="400"/>
+    <rect x="510" y="70" width="250" height="180"/>
+    <rect x="510" y="250" width="250" height="220"/>
+    <path d="M180 70 v160 h150 v-160"/>
+    <path d="M40 330 h250"/>
+  </g>
+  <g fill="#6b6258" font-family="Georgia, serif" font-size="16">
+    <text x="70" y="210">Living comedor</text>
+    <text x="210" y="160">Cocina</text>
+    <text x="70" y="390">Dormitorio</text>
+    <text x="560" y="165">Baño</text>
+    <text x="560" y="360">Balcón</text>
+  </g>
+</svg>

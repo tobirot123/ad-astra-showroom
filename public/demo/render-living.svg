@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640">
+  <rect width="960" height="640" fill="#efe6d8"/>
+  <rect x="0" y="430" width="960" height="210" fill="#d9cbb8"/>
+  <rect x="80" y="120" width="520" height="280" fill="#c5d5df" stroke="#8d7358" stroke-width="8"/>
+  <rect x="640" y="180" width="240" height="220" fill="#1c1915"/>
+  <rect x="670" y="250" width="180" height="14" fill="#c4a574"/>
+  <rect x="120" y="430" width="280" height="90" rx="8" fill="#9a6240"/>
+  <rect x="430" y="450" width="70" height="70" fill="#6b6258"/>
+  <text x="48" y="64" font-family="Georgia, serif" font-size="28" fill="#1c1915">Living</text>
+</svg>

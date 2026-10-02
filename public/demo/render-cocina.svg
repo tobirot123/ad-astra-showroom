@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640">
+  <rect width="960" height="640" fill="#f3efe6"/>
+  <rect x="0" y="360" width="960" height="280" fill="#e7dfd2"/>
+  <rect x="60" y="150" width="840" height="210" fill="#f7f3ec" stroke="#1c1915" stroke-width="6"/>
+  <rect x="90" y="180" width="220" height="150" fill="#d7e3ea"/>
+  <rect x="360" y="200" width="180" height="100" fill="#9a6240"/>
+  <circle cx="760" cy="250" r="36" fill="#c5d5df" stroke="#1c1915" stroke-width="4"/>
+  <text x="48" y="72" font-family="Georgia, serif" font-size="28" fill="#1c1915">Cocina</text>
+</svg>
