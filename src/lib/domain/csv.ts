@@ -288,7 +288,7 @@ function currentValue(
 ): unknown {
   if (field === "precio_usd") return priceByUnit.get(unit.id) ?? null;
   if (field === "tipologia") return unit.typology_id ? typologyName.get(unit.typology_id) ?? null : null;
-  if (field === "piso") return floorLabel.get(unit.floor_id) ?? null;
+  if (field === "piso") return unit.floor_id ? floorLabel.get(unit.floor_id) ?? null : null;
   if (field.startsWith("custom:")) return unit.custom_values[field.slice("custom:".length)] ?? null;
   return (unit as unknown as Record<string, unknown>)[field] ?? null;
 }
@@ -331,11 +331,11 @@ export function exportUnitsCsv(input: {
   const lines = [headers.join(",")];
   const sorted = [...input.units].sort((a, b) => a.codigo.localeCompare(b.codigo, "es"));
   for (const unit of sorted) {
-    const buildingId = input.floorBuilding.get(unit.floor_id);
+    const buildingId = unit.floor_id ? input.floorBuilding.get(unit.floor_id) : unit.building_id;
     const cells: Array<string | number | boolean | null> = [
       unit.codigo,
       buildingId ? input.buildingName.get(buildingId) ?? "" : "",
-      input.floorLabel.get(unit.floor_id) ?? "",
+      unit.floor_id ? input.floorLabel.get(unit.floor_id) ?? "" : "",
       unit.typology_id ? input.typologyName.get(unit.typology_id) ?? "" : "",
       unit.ambientes,
       unit.dormitorios,

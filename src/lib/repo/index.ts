@@ -43,12 +43,20 @@ const ORDER: (keyof Database)[] = [
   "events",
   "integrations",
   "integration_deliveries",
+  "galleries",
+  "tours",
+  "points_of_interest",
+  "translations",
+  "brokers",
+  "broker_projects",
+  "quotations",
 ];
 
 const CONFLICT: Partial<Record<keyof Database, string>> = {
   project_members: "membership_id,project_id",
   entity_characteristics: "entidad,entidad_id,characteristic_id",
   unit_prices: "unit_id,price_list_id",
+  broker_projects: "broker_id,project_id",
 };
 
 function service(): SupabaseClient {
@@ -71,6 +79,7 @@ function rowKey(table: keyof Database, row: Record<string, unknown>): string {
   if (table === "project_members") return `${row.membership_id}:${row.project_id}`;
   if (table === "entity_characteristics") return `${row.entidad}:${row.entidad_id}:${row.characteristic_id}`;
   if (table === "unit_prices") return `${row.unit_id}:${row.price_list_id}`;
+  if (table === "broker_projects") return `${row.broker_id}:${row.project_id}`;
   return String(row.id);
 }
 
@@ -93,9 +102,15 @@ const PHASES: (keyof Database)[][] = [
     "integrations",
     "notifications",
     "change_sets",
+    "galleries",
+    "tours",
+    "points_of_interest",
+    "translations",
+    "brokers",
+    "broker_projects",
   ],
   ["leads", "unit_prices", "media_links", "entity_characteristics"],
-  ["status_change_requests", "status_change_request_events", "change_log", "lead_activities", "integration_deliveries"],
+  ["status_change_requests", "status_change_request_events", "change_log", "lead_activities", "integration_deliveries", "quotations"],
 ];
 
 async function persist(client: SupabaseClient, before: Database, after: Database) {
@@ -140,6 +155,7 @@ async function remove(client: SupabaseClient, table: keyof Database, row: Record
   else if (table === "entity_characteristics") {
     query = query.eq("entidad", row.entidad).eq("entidad_id", row.entidad_id).eq("characteristic_id", row.characteristic_id);
   } else if (table === "unit_prices") query = query.eq("unit_id", row.unit_id).eq("price_list_id", row.price_list_id);
+  else if (table === "broker_projects") query = query.eq("broker_id", row.broker_id).eq("project_id", row.project_id);
   else query = query.eq("id", row.id);
   const { error } = await query;
   if (error) throw new Error(`No pudimos borrar en ${table}: ${error.message}`);

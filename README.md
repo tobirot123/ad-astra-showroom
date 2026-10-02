@@ -96,3 +96,5 @@ La API key de Tokko y el secreto del webhook se cargan por proyecto en Integraci
 - Organizaciones, roles, proyectos, tipologías, unidades, campos a medida, listas de precio, medios, polígonos, leads, solicitudes de estado, auditoría y eventos, con RLS.
 - Panel: login, proyecto, tabla de unidades con edición masiva y CSV, campos, subida de medios con WebP, editor de zonas, cola de aprobación, CRM liviano, historial e integraciones.
 - Showroom: fachada clickeable por estado, filtros, ficha (m², precio, características, plano, renders), formulario de lead con UTM y métricas de visitas y leads.
+
+El inventario de la competencia (121 funciones, hitos M1 a M7) está en `docs/inventario-funciones-competencia.md`. Este hito cubre las 18 marcadas como M1. La migración `20261002230000_forward_compat.sql` deja tablas y columnas vacías para lo que viene (varias torres y loteos, galerías, tours 360, puntos de interés, idiomas y monedas, brokers y cotizaciones) sin mostrarlas todavía. El siguiente hito es el M2: el showroom completo.

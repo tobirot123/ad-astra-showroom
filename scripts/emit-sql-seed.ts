@@ -27,10 +27,12 @@ const JSON_COLS = new Set([
   "detalle",
   "config",
   "opciones",
+  "redes",
+  "marca",
   "valor_anterior",
   "valor_nuevo",
 ]);
-const TEXT_ARRAYS = new Set(["overrides", "tags"]);
+const TEXT_ARRAYS = new Set(["overrides", "tags", "idiomas", "monedas"]);
 const TIME_COLS = new Set([
   "created_at",
   "updated_at",

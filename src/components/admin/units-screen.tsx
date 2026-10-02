@@ -118,7 +118,7 @@ export function UnitsScreen() {
                     <button className="mt-1 block text-xs underline" onClick={() => setRequestUnit(unit.id)}>Solicitar</button>
                   )}
                 </td>
-                <td>{floorName.get(unit.floor_id)}</td>
+                <td>{unit.floor_id ? floorName.get(unit.floor_id) : "—"}</td>
                 <td className={unit.inherited.includes("ambientes") ? "text-[#98a2b3]" : ""}>{unit.typology_id ? typName.get(unit.typology_id) : "—"}</td>
                 <td>
                   <Cell

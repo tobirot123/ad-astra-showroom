@@ -19,10 +19,24 @@ function fresh(): DemoFile {
   return { db: buildSeed(new Date()), passwords };
 }
 
+const LATER_TABLES = [
+  "galleries",
+  "tours",
+  "points_of_interest",
+  "translations",
+  "brokers",
+  "broker_projects",
+  "quotations",
+] as const;
+
 function read(): DemoFile {
   try {
     const raw = fs.readFileSync(filePath, "utf8");
-    return JSON.parse(raw) as DemoFile;
+    const file = JSON.parse(raw) as DemoFile;
+    for (const table of LATER_TABLES) {
+      if (!Array.isArray(file.db[table])) file.db[table] = [];
+    }
+    return file;
   } catch {
     const data = fresh();
     write(data);

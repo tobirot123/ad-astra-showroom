@@ -58,6 +58,8 @@ export interface Organization {
   slug: string;
   estado: "active" | "suspended";
   plan: string;
+  descripcion?: string;
+  logo_url?: string | null;
   created_at: string;
 }
 
@@ -103,13 +105,20 @@ export interface Project {
   nombre: string;
   slug: string;
   dominio: string | null;
-  estado: "draft" | "published";
-  moneda: "USD" | "ARS";
+  estado: "draft" | "published" | "coming_soon";
+  /** Moneda base. Otras monedas viven en `monedas` (M4). */
+  moneda: string;
   descripcion: string;
   direccion: string;
   fecha_entrega: string | null;
   contacto: ProjectContact;
   settings: ProjectSettings;
+  locale?: string;
+  idiomas?: string[];
+  monedas?: string[];
+  lat?: number | null;
+  lng?: number | null;
+  redes?: Record<string, string>;
   updated_at: string;
 }
 
@@ -117,7 +126,9 @@ export interface Building {
   id: string;
   project_id: string;
   nombre: string;
-  tipo: "torre" | "etapa" | "manzana";
+  tipo: "torre" | "etapa" | "manzana" | "loteo" | "casa" | "condominio" | "barrio";
+  /** Torre o manzana dentro de un conjunto. */
+  parent_id?: string | null;
   orden: number;
 }
 
@@ -182,7 +193,9 @@ export interface EntityCharacteristic {
 export interface Unit {
   id: string;
   project_id: string;
-  floor_id: string;
+  floor_id: string | null;
+  /** Lote o unidad sin piso: cuelga directo del edificio o la manzana. */
+  building_id?: string | null;
   typology_id: string | null;
   codigo: string;
   tipo: "departamento" | "casa" | "lote" | "local" | "oficina" | "cochera" | "baulera" | "amenity";
@@ -195,6 +208,8 @@ export interface Unit {
   m2_totales: number | null;
   orientacion: string | null;
   vista: string | null;
+  tour_url?: string | null;
+  operacion?: "venta" | "alquiler";
   estado: UnitStatus;
   pending_request_id: string | null;
   reserved_by_user_id: string | null;
@@ -214,7 +229,7 @@ export interface PriceList {
   id: string;
   project_id: string;
   nombre: string;
-  moneda: "USD" | "ARS";
+  moneda: string;
   visibilidad: "public" | "sellers" | "internal";
   vigente_desde: string | null;
   vigente_hasta: string | null;
@@ -258,16 +273,98 @@ export interface MediaAsset {
   estado_proceso: "listo" | "original" | "error";
   aviso: string | null;
   tags: string[];
+  titulo?: string | null;
+  descripcion?: string;
   created_at: string;
 }
 
 export interface MediaLink {
   id: string;
   media_id: string;
-  entidad: "typology" | "unit" | "project" | "floor";
+  entidad: "typology" | "unit" | "project" | "floor" | "building" | "amenity";
   entidad_id: string;
-  rol: "render" | "plano" | "portada" | "fachada" | "video";
+  rol: "render" | "plano" | "portada" | "fachada" | "video" | "galeria" | "acabado" | "tour" | "brochure" | "vista";
   orden: number;
+  titulo?: string | null;
+  descripcion?: string;
+  gallery_id?: string | null;
+}
+
+export interface Gallery {
+  id: string;
+  project_id: string;
+  nombre: string;
+  slug: string;
+  descripcion: string;
+  entidad: "project" | "building" | "floor" | "unit" | "typology" | "amenity";
+  entidad_id: string | null;
+  orden: number;
+}
+
+export interface Tour {
+  id: string;
+  project_id: string;
+  entidad: "project" | "unit" | "typology" | "amenity" | "floor";
+  entidad_id: string;
+  proveedor: "url" | "matterport" | "layama" | "3dvista" | "pano2vr" | "luma" | "kuula";
+  url: string;
+  titulo: string;
+  orden: number;
+}
+
+export interface PointOfInterest {
+  id: string;
+  project_id: string;
+  nombre: string;
+  categoria: string;
+  lat: number | null;
+  lng: number | null;
+  distancia_m: number | null;
+  descripcion: string;
+  orden: number;
+}
+
+export interface Translation {
+  id: string;
+  project_id: string;
+  entidad: string;
+  entidad_id: string;
+  campo: string;
+  locale: string;
+  valor: string;
+}
+
+export interface Broker {
+  id: string;
+  organization_id: string;
+  nombre: string;
+  slug: string;
+  marca: Record<string, unknown>;
+  contacto: Record<string, unknown>;
+  estado: "active" | "suspended";
+}
+
+export interface BrokerProject {
+  broker_id: string;
+  project_id: string;
+  codigo: string;
+  activo: boolean;
+}
+
+export interface Quotation {
+  id: string;
+  project_id: string;
+  unit_id: string | null;
+  lead_id: string | null;
+  seller_id: string | null;
+  broker_id: string | null;
+  price_list_id: string | null;
+  payment_plan_id: string | null;
+  moneda: string;
+  precio: number | null;
+  detalle: Record<string, unknown>;
+  estado: "draft" | "enviada" | "aceptada" | "vencida";
+  created_at: string;
 }
 
 export interface Overlay {
@@ -299,6 +396,7 @@ export interface Lead {
   fuente: string;
   session_id: string | null;
   visitor_id: string | null;
+  broker_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -432,13 +530,15 @@ export interface AnalyticsEvent {
   utm_campaign: string | null;
   referrer_tipo: string | null;
   fuente: string;
+  broker_id?: string | null;
+  pais?: string | null;
   ts: string;
 }
 
 export interface Integration {
   id: string;
   project_id: string;
-  tipo: "tokko" | "webhook";
+  tipo: "tokko" | "webhook" | "kommo" | "meta_leadads" | "whatsapp" | "ga4" | "pixel";
   config: {
     api_key?: string;
     development_id?: string;
@@ -480,6 +580,13 @@ export interface Database {
   payment_plans: PaymentPlan[];
   media: MediaAsset[];
   media_links: MediaLink[];
+  galleries: Gallery[];
+  tours: Tour[];
+  points_of_interest: PointOfInterest[];
+  translations: Translation[];
+  brokers: Broker[];
+  broker_projects: BrokerProject[];
+  quotations: Quotation[];
   overlays: Overlay[];
   leads: Lead[];
   lead_activities: LeadActivity[];

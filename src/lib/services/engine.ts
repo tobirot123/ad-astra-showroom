@@ -794,6 +794,7 @@ function createImportedUnit(
     id: uid(),
     project_id: project.id,
     floor_id: floor.id,
+    building_id: floor.building_id,
     typology_id: typology?.id ?? null,
     codigo,
     tipo: "departamento",
