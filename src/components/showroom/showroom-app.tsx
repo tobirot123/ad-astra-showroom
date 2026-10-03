@@ -544,7 +544,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       )}
 
       {entered && phase === "escena" && walk.length > 1 && (
-        <button type="button" aria-label="Girar" className="nav-arrow absolute right-16 top-1/2 z-20 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full text-2xl" onClick={depart}>›</button>
+        <button type="button" aria-label="Girar" className="absolute left-4 top-1/2 z-30 -translate-y-1/2 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-[#1c1915] shadow-lg" onClick={depart}>Girar ›</button>
       )}
 
       {showRail && tower && (
