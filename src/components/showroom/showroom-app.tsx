@@ -347,7 +347,10 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
 
   const image = !entered ? cover?.imagen_url ?? data.facade : phase === "planta" ? floor?.plano ?? scene?.imagen_url ?? data.facade : scene?.imagen_url ?? data.facade;
   const cinematic = !entered || scene?.tipo === "barrio";
-  const showRail = entered && phase === "escena" && building && building.floors.length > 0 && scene?.tipo === "exterior";
+  const tower = phase === "planta"
+    ? data.buildings.find((item) => item.floors.some((floorItem) => floorItem.id === floorId)) ?? building
+    : building;
+  const showRail = entered && Boolean(tower && tower.floors.length > 0 && (phase === "planta" || scene?.tipo === "exterior"));
   const polygons = zones();
 
   return (
@@ -464,19 +467,23 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         </>
       )}
 
-      {showRail && building && (
-        <aside className="absolute bottom-24 right-3 top-20 z-20 flex flex-col items-center justify-center gap-1" data-testid="floor-rail">
-          {building.floors.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="grid min-w-12 place-items-center rounded-full px-2 py-1 text-sm"
-              onClick={() => openFloor(item.id)}
-            >
-              <span className="font-medium">{floorMark(item.nombre, item.numero)}</span>
-              <span className="text-[10px] text-white/70">{item.libres} libres</span>
-            </button>
-          ))}
+      {showRail && tower && (
+        <aside className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-1 rounded-full bg-black/55 px-1.5 py-2 backdrop-blur" data-testid="floor-rail">
+          {tower.floors.map((item) => {
+            const current = phase === "planta" && item.id === floorId;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                title={`${item.libres} libres`}
+                className={`grid min-w-11 place-items-center rounded-full px-1 py-1 leading-none ${current ? "bg-white text-[#1c1915]" : "text-white"}`}
+                onClick={() => openFloor(item.id)}
+              >
+                <span className="text-sm font-semibold">{floorMark(item.nombre, item.numero)}</span>
+                <span className={`text-[10px] ${current ? "text-[#6b6258]" : "text-white/75"}`}>{item.libres}</span>
+              </button>
+            );
+          })}
         </aside>
       )}
 
