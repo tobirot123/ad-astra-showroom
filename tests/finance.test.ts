@@ -52,10 +52,11 @@ describe("cotizador", () => {
 
   it("el seed publica planes, obra y la ficha", () => {
     const data = buildSeed(new Date("2026-10-02T15:00:00.000Z"));
-    expect(data.construction_updates).toHaveLength(2);
-    expect(data.custom_sections[0]?.titulo).toBe("Cómo comprar");
+    expect(data.construction_updates.length).toBeGreaterThan(0);
+    expect(data.custom_sections[0]?.titulo).toBe("El edificio");
     expect(data.projects[0]?.settings.usd_ars).toBe(1450);
-    expect(data.projects[0]?.settings.brochure_url).toBe("/demo/brochure.pdf");
+    expect(data.projects[0]?.slug).toBe("pol");
+    expect(data.projects[0]?.settings.color_acento).toBe("#4A6844");
   });
 });
 

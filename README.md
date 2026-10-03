@@ -18,11 +18,11 @@ cp .env.example .env.local
 npm run dev
 ```
 
-La primera lectura arma `.data/db.json` con el emprendimiento ficticio **ALBA** (Norte Desarrollos, Rosario): dos torres, un loteo, recorrido con portada y vuelo, plantas, leads y solicitudes de ejemplo. Si ya tenías un `.data/db.json` de antes, borralo para regenerar la demo.
+La primera lectura arma `.data/db.json` con **POL** (Bv. España y Dr. Pablo de María, Montevideo): spin con clips, vuelo al techo y plantas con polígonos. Cada clip tiene el fotograma inicial en WebP para verse al toque mientras carga el video. Los polígonos de las plantas son una aproximación editable en Zonas. Los renders están en `public/demo/pol`. Si ya tenías un `.data/db.json` de antes, borralo para regenerar la demo. Los precios del showroom son de demostración. El CSV de origen no se versiona: no entran nombres de compradores ni estados internos.
 
 | Qué | Dónde |
 | --- | --- |
-| Showroom | http://localhost:3000/s/alba |
+| Showroom | http://localhost:3000/s/pol |
 | Panel | http://localhost:3000/admin/login |
 
 Contraseña de todos los usuarios demo: `AdAstra2026!`

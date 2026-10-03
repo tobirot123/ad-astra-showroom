@@ -122,10 +122,15 @@ export function buildShowroom(db: Database, slug: string) {
   const scenes = db.viewpoints
     .filter((scene) => scene.project_id === project.id)
     .sort((a, b) => a.orden - b.orden)
-    .map((scene) => ({
-      ...scene,
-      hotspots: publishedOverlays.filter((overlay) => overlay.contenedor === "scene" && overlay.contenedor_id === scene.id),
-    }));
+    .map((scene) => {
+      const parada = project.settings.recorrido?.paradas.find((item) => item.orden === scene.orden);
+      return {
+        ...scene,
+        transicion_url: parada?.transicion_url ?? null,
+        vuelo_url: parada?.vuelo_url ?? null,
+        hotspots: publishedOverlays.filter((overlay) => overlay.contenedor === "scene" && overlay.contenedor_id === scene.id),
+      };
+    });
   if (!scenes.length) {
     scenes.push({
       id: "fachada",
@@ -136,6 +141,8 @@ export function buildShowroom(db: Database, slug: string) {
       orden: 0,
       imagen_url: facadeUrl,
       video_url: null,
+      transicion_url: null,
+      vuelo_url: null,
       hotspots: [],
     });
   }
@@ -200,7 +207,7 @@ export function buildShowroom(db: Database, slug: string) {
       legal: project.settings.texto_legal ?? "",
       cookies: project.settings.aviso_cookies ?? "",
       pasos: project.settings.pasos ?? [],
-      brochure: project.settings.brochure_url ?? null,
+      brochure: project.settings.brochure_url || null,
       logo: project.settings.logo_url ?? null,
       acento: project.settings.color_acento ?? "#c4a574",
       titulo: project.settings.titulo_publico || project.nombre,

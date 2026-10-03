@@ -207,3 +207,12 @@
   background: white;
   padding: 0.55rem 0.75rem;
 }
+
+.showroom .clip {
+  opacity: 0;
+}
+
+.showroom .clip[data-ready="1"] {
+  opacity: 1;
+  transition: opacity 220ms ease;
+}

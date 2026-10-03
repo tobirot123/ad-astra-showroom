@@ -85,7 +85,7 @@ const units = db.units.map((unit) => ({
 }));
 
 const chunks: string[] = [];
-chunks.push(`-- Datos demo de ALBA. Se regenera con npm run seed:sql.
+chunks.push(`-- Datos demo de POL. Se regenera con npm run seed:sql.
 -- Contraseña de todos los usuarios: AdAstra2026!
 -- Las fechas quedan relativas a now() para que las solicitudes sigan vigentes.
 

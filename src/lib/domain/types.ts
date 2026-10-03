@@ -115,6 +115,10 @@ export interface ProjectSettings {
     pdf?: boolean;
     ambientes?: boolean;
   };
+  /** Clips de salida de cada parada del spin. El video de la portada es el intro. */
+  recorrido?: {
+    paradas: { orden: number; transicion_url: string; vuelo_url: string }[];
+  };
 }
 
 export interface ProjectContact {

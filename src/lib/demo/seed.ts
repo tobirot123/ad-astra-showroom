@@ -1,5 +1,6 @@
 import { appendShowcase } from "@/lib/demo/seed-m2";
 import { appendCommercial } from "@/lib/demo/seed-m3";
+import { applyPol } from "@/lib/demo/seed-pol";
 import { COLUMNS, FLOOR_BANDS, unitPolygon } from "@/lib/demo/geometry";
 import { seedId } from "@/lib/domain/ids";
 import type {
@@ -440,6 +441,7 @@ export function buildSeed(now = new Date()): Database {
 
   appendShowcase(db, iso);
   appendCommercial(db);
+  applyPol(db, now);
   return db;
 }
 

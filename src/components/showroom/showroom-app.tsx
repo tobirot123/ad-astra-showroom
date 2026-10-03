@@ -66,7 +66,12 @@ function centroid(points: [number, number][]) {
 }
 
 function floorMark(nombre: string, numero: number) {
-  return /baja/i.test(nombre) ? "PB" : String(numero);
+  if (/techo/i.test(nombre)) return "T";
+  if (/terraza|azotea/i.test(nombre)) return "Az";
+  if (/baja/i.test(nombre)) return "PB";
+  if (/subsuelo 1|ss1/i.test(nombre)) return "S1";
+  if (/subsuelo 2|ss2/i.test(nombre)) return "S2";
+  return String(numero);
 }
 
 export function ShowroomApp({ data }: { data: ShowroomData }) {
@@ -91,6 +96,8 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const [sending, setSending] = useState(false);
   const [copied, setCopied] = useState(false);
   const [cookies, setCookies] = useState<"ask" | "yes" | "no">("ask");
+  const [bridge, setBridge] = useState<string | null>(null);
+  const [afterBridge, setAfterBridge] = useState<null | { kind: "scene"; index: number } | { kind: "floor"; id: string }>(null);
   const [photo, setPhoto] = useState(0);
   const [matchCursor, setMatchCursor] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -161,8 +168,8 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       setPlaying(false);
       return;
     }
-    setPlaying(Boolean(scene?.video_url));
-  }, [entered, phase, sceneIndex, lite, scene?.video_url]);
+    setPlaying(Boolean(scene?.video_url) && !scene?.transicion_url);
+  }, [entered, phase, sceneIndex, lite, scene?.video_url, scene?.transicion_url]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -171,12 +178,11 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         setUnitId(null);
       }
       if (sheet || unitId || !entered || phase !== "escena") return;
-      if (event.key === "ArrowRight") setSceneIndex((index) => (index + 1) % walk.length);
-      if (event.key === "ArrowLeft") setSceneIndex((index) => (index - 1 + walk.length) % walk.length);
+      if (event.key === "ArrowRight") depart();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [entered, phase, sheet, unitId, walk.length]);
+  }, [entered, phase, sheet, unitId, walk.length, sceneIndex, lite]);
 
   const activeId = active?.id;
   useEffect(() => {
@@ -372,6 +378,45 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     setPhase("escena");
     setSceneIndex(0);
     setSheet(null);
+    if (!lite && cover?.video_url) {
+      setAfterBridge(null);
+      setBridge(cover.video_url);
+    }
+  }
+
+  function finishBridge() {
+    const job = afterBridge;
+    setBridge(null);
+    setAfterBridge(null);
+    setPlaying(false);
+    if (job?.kind === "scene") {
+      setSceneIndex(job.index);
+      setPhase("escena");
+    }
+    if (job?.kind === "floor") openFloor(job.id);
+  }
+
+  function depart() {
+    if (!scene) return;
+    const next = (sceneIndex + 1) % walk.length;
+    if (!lite && scene.transicion_url) {
+      setAfterBridge({ kind: "scene", index: next });
+      setBridge(scene.transicion_url);
+      return;
+    }
+    setSceneIndex(next);
+    setPhase("escena");
+  }
+
+  function goPlans() {
+    const top = tower?.floors[0];
+    if (!top) return;
+    if (!lite && scene?.vuelo_url) {
+      setAfterBridge({ kind: "floor", id: top.id });
+      setBridge(scene.vuelo_url);
+      return;
+    }
+    openFloor(top.id);
   }
 
   const image = !entered ? cover?.imagen_url ?? data.facade : phase === "planta" ? floor?.plano ?? scene?.imagen_url ?? data.facade : scene?.imagen_url ?? data.facade;
@@ -390,8 +435,11 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         cover={cinematic}
         zoom={phase === "planta" ? zoom : 1}
         pan={phase === "planta" ? pan : { x: 0, y: 0 }}
-        video={playing && videos.current ? videos.current : null}
-        onVideoDone={() => setPlaying(false)}
+        video={bridge ?? (playing && videos.current ? videos.current : null)}
+        onVideoDone={() => {
+          if (bridge) finishBridge();
+          else setPlaying(false);
+        }}
         onPointerDown={(event) => {
           if (phase !== "planta" || zoom === 1) return;
           drag.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y };
@@ -442,7 +490,9 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           );
         })}
       </Stage>
-      {videos.next && <video src={videos.next} preload="auto" muted playsInline className="pointer-events-none absolute h-px w-px opacity-0" />}
+      {(scene?.transicion_url || videos.next) && (
+        <video src={scene?.transicion_url || videos.next || undefined} preload="auto" muted playsInline className="pointer-events-none absolute h-px w-px opacity-0" />
+      )}
 
       <button
         type="button"
@@ -474,6 +524,10 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       {!entered && (
         <div className="absolute inset-0 z-10 grid place-items-center px-6 text-center">
           <div>
+            {data.project.logo && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={data.project.logo} alt="" className="mx-auto mb-5 h-14 w-auto" />
+            )}
             <p className="eyebrow">Showroom</p>
             <h1 className="wordmark mt-3 font-serif text-6xl text-white md:text-8xl">{data.project.titulo || data.project.nombre}</h1>
             <p className="mt-3 text-sm tracking-wide text-white/80">{data.project.direccion}</p>
@@ -490,10 +544,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       )}
 
       {entered && phase === "escena" && walk.length > 1 && (
-        <>
-          <button type="button" aria-label="Escena anterior" className="nav-arrow absolute left-3 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 place-items-center rounded-full text-2xl md:grid" onClick={() => setSceneIndex((index) => (index - 1 + walk.length) % walk.length)}>‹</button>
-          <button type="button" aria-label="Escena siguiente" className="nav-arrow absolute right-16 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 place-items-center rounded-full text-2xl md:grid" onClick={() => setSceneIndex((index) => (index + 1) % walk.length)}>›</button>
-        </>
+        <button type="button" aria-label="Girar" className="nav-arrow absolute right-16 top-1/2 z-20 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full text-2xl" onClick={depart}>›</button>
       )}
 
       {showRail && tower && (
@@ -518,9 +569,11 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
 
       {entered && (
         <div className="context absolute inset-x-0 bottom-6 z-20 hidden justify-center gap-2 md:flex">
-          <button type="button" onClick={() => { const index = walk.findIndex((item) => item.tipo === "aereo"); if (index >= 0) { setSceneIndex(index); setPhase("escena"); } }}>Vista aérea</button>
+          {walk.some((item) => item.tipo === "aereo") && (
+            <button type="button" onClick={() => { const index = walk.findIndex((item) => item.tipo === "aereo"); if (index >= 0) { setSceneIndex(index); setPhase("escena"); } }}>Vista aérea</button>
+          )}
           {building && building.floors[0] && (
-            <button type="button" onClick={() => openFloor(building.floors[0].id)}>Ver plantas</button>
+            <button type="button" onClick={goPlans}>Ver plantas</button>
           )}
           <button type="button" onClick={() => setSheet("galeria")}>Galería</button>
           {data.progress.length > 0 && <button type="button" onClick={() => setSheet("obra")}>Obra</button>}
@@ -556,6 +609,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           unit={active}
           project={data.project}
           plans={data.plans}
+          fallback={data.facade}
           compared={compare.includes(active.id)}
           sent={sent}
           sending={sending}
@@ -593,12 +647,8 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
               if (index >= 0) setSceneIndex(index);
             }
             if (action === "plantas") {
-              const target = building?.floors[0] ?? data.buildings.find((item) => item.floors.length)?.floors[0];
-              if (target) {
-                setEntered(true);
-                if (building) goBuilding(building.id);
-                openFloor(target.id);
-              }
+              setEntered(true);
+              goPlans();
             }
             if (action === "amenities") setSheet("amenities");
             if (action === "tour") {
@@ -802,6 +852,12 @@ function sheetTitle(sheet: Sheet) {
   return titles[sheet ?? ""] ?? "";
 }
 
+function clipPoster(src: string) {
+  const match = src.match(/^(.*\/demo\/pol\/video)\/([^/]+)\.mp4$/);
+  if (!match) return undefined;
+  return `${match[1]}/posters/${match[2]}_first.webp`;
+}
+
 function Stage({
   src,
   cover,
@@ -883,10 +939,13 @@ function Stage({
           <video
             key={video}
             src={video}
+            poster={clipPoster(video)}
             autoPlay
             muted
             playsInline
-            className="absolute inset-0 h-full w-full object-fill"
+            preload="auto"
+            className="clip absolute inset-0 h-full w-full object-fill"
+            onPlaying={(event) => event.currentTarget.dataset.ready = "1"}
             onEnded={onVideoDone}
             onError={onVideoDone}
           />
@@ -1067,6 +1126,7 @@ function UnitPanel({
   unit,
   project,
   plans,
+  fallback,
   compared,
   sent,
   sending,
@@ -1085,6 +1145,7 @@ function UnitPanel({
   unit: Unit;
   project: ShowroomData["project"];
   plans: ShowroomData["plans"];
+  fallback: string;
   compared: boolean;
   sent: boolean;
   sending: boolean;
@@ -1101,7 +1162,9 @@ function UnitPanel({
   onLead: (form: FormData) => void;
 }) {
   const ficha = project.ficha;
-  const photos = unit.renders.length ? unit.renders : unit.plano ? [unit.plano] : [];
+  const ownPhotos = unit.renders.length ? unit.renders : unit.plano ? [unit.plano] : [];
+  const sinPlano = ownPhotos.length === 0;
+  const photos = sinPlano ? [fallback] : ownPhotos;
   const current = photos[photo] ?? photos[0];
   const [planId, setPlanId] = useState(plans[0]?.id ?? "");
   const [buyer, setBuyer] = useState("");
@@ -1181,6 +1244,7 @@ function UnitPanel({
         <span className="inline-block rounded-full px-2 py-0.5 text-xs text-white" style={{ background: STATUS_COLOR[unit.estado] }}>{STATUS_LABEL[unit.estado]}</span>
         <h2 className="font-serif text-4xl">{unit.codigo}</h2>
         <p className="text-sm text-[#6b6258]">{unit.tipologia} · {unit.torre} · {unit.piso}</p>
+        {sinPlano && <p className="text-sm text-[#6b6258]">Esta unidad no tiene plano cargado. Te mostramos el edificio.</p>}
         <p className="font-serif text-3xl">{ficha.precio && unit.mostrar_precio && unit.precio != null ? formatUsd(unit.precio) : "Consultar"}</p>
         <dl className="grid grid-cols-2 gap-2 text-sm">
           {unit.m2_totales != null && <div><dt className="text-[#6b6258]">Superficie</dt><dd>{formatM2(unit.m2_totales)} m²</dd></div>}

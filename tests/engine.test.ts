@@ -5,6 +5,7 @@ import {
   actorFor,
   approveRequest,
   bulkUnits,
+  cashPrice,
   createRequest,
   directStatus,
   rejectRequest,
@@ -23,7 +24,7 @@ describe("flujo del panel sobre el proyecto demo", () => {
     const data = db();
     const admin = actorFor(data, data.profiles.find((p) => p.email.startsWith("martin"))!.id)!;
     const seller = actorFor(data, data.profiles.find((p) => p.email.startsWith("laura"))!.id)!;
-    const unit = data.units.find((u) => u.codigo === "1D")!;
+    const unit = data.units.find((u) => u.codigo === "104")!;
     expect(publicStatus(unit, "available")).toBe("disponible");
 
     expect(() => directStatus(data, seller, unit.id, "reservada", true, new Date())).toThrow(ServiceError);
@@ -34,7 +35,7 @@ describe("flujo del panel sobre el proyecto demo", () => {
     ).toThrow(/pendiente/i);
 
     approveRequest(data, admin, unit.pending_request_id!, "Seña ok", false, new Date("2026-10-02T16:00:00.000Z"));
-    const updated = data.units.find((u) => u.codigo === "1D")!;
+    const updated = data.units.find((u) => u.codigo === "104")!;
     expect(updated.estado).toBe("reservada");
     expect(updated.pending_request_id).toBeNull();
     expect(updated.reserved_by_user_id).toBe(seller.id);
@@ -44,19 +45,19 @@ describe("flujo del panel sobre el proyecto demo", () => {
     expect(log?.requested_by).toBe(seller.id);
     expect(log?.user_id).toBe(admin.id);
 
-    const showroom = buildShowroom(data, "alba");
-    expect(showroom?.units.find((u) => u.codigo === "1D")?.estado).toBe("reservada");
+    const showroom = buildShowroom(data, "pol");
+    expect(showroom?.units.find((u) => u.codigo === "104")?.estado).toBe("reservada");
   });
 
   it("rechazar sin comentario no desbloquea; con comentario sí", () => {
     const data = db();
     const admin = actorFor(data, data.profiles.find((p) => p.email.startsWith("martin"))!.id)!;
-    const unit = data.units.find((u) => u.codigo === "2C")!;
+    const unit = data.units.find((u) => u.codigo === "204")!;
     expect(() => rejectRequest(data, admin, unit.pending_request_id!, "  ", new Date())).toThrow(/comentario/i);
-    expect(data.units.find((u) => u.codigo === "2C")!.pending_request_id).toBeTruthy();
+    expect(data.units.find((u) => u.codigo === "204")!.pending_request_id).toBeTruthy();
     rejectRequest(data, admin, unit.pending_request_id!, "La oferta no cierra", new Date());
-    expect(data.units.find((u) => u.codigo === "2C")!.pending_request_id).toBeNull();
-    expect(data.units.find((u) => u.codigo === "2C")!.estado).toBe("disponible");
+    expect(data.units.find((u) => u.codigo === "204")!.pending_request_id).toBeNull();
+    expect(data.units.find((u) => u.codigo === "204")!.estado).toBe("disponible");
   });
 
   it("el admin de otra organización no lee ni escribe", () => {
@@ -71,8 +72,9 @@ describe("flujo del panel sobre el proyecto demo", () => {
   it("la edición masiva de precio deja un único change set", () => {
     const data = db();
     const admin = actorFor(data, data.profiles.find((p) => p.email.startsWith("martin"))!.id)!;
-    const ids = data.units.filter((u) => u.estado === "disponible").map((u) => u.id);
+    const ids = data.units.filter((u) => u.estado === "disponible" && cashPrice(data, u) != null).map((u) => u.id);
     const result = bulkUnits(data, admin, ids, { price: { mode: "percent", value: 5, roundTo: 500 } }, new Date());
+    expect(ids.length).toBeGreaterThan(0);
     expect(result.extra?.cantidad).toBe(ids.length);
     expect(data.change_sets.filter((s) => s.tipo === "bulk")).toHaveLength(1);
   });
