@@ -22,7 +22,7 @@ export function ZonesScreen() {
 
   const targets = useMemo(() => {
     if (!data?.project) return [];
-    const projectFacade = data.media.find((item) => item.id === data.media_links.find((link) => link.entidad === "project" && link.rol === "fachada")?.media_id)?.url ?? "/demo/fachada.svg";
+    const projectFacade = data.media.find((item) => item.id === data.media_links.find((link) => link.entidad === "project" && link.rol === "fachada")?.media_id)?.url ?? "/demo/fachada.webp";
     const rows: { key: string; label: string; contenedor: Overlay["contenedor"]; contenedorId: string; image: string; link: "unit" | "building" }[] = [];
     for (const building of data.buildings) {
       if (building.tipo === "loteo" || building.tipo === "manzana") {
@@ -32,7 +32,7 @@ export function ZonesScreen() {
           label: `Masterplan ${building.nombre}`,
           contenedor: "masterplan",
           contenedorId: building.id,
-          image: scene?.imagen_url ?? "/demo/masterplan.svg",
+          image: scene?.imagen_url ?? "/demo/masterplan.webp",
           link: "unit",
         });
       } else {
@@ -53,7 +53,7 @@ export function ZonesScreen() {
           label: `${building.nombre} · ${floor.nombre}`,
           contenedor: "floor",
           contenedorId: floor.id,
-          image: plano ?? "/demo/plano-piso.svg",
+          image: plano ?? "/demo/plano-piso.webp",
           link: "unit",
         });
       }

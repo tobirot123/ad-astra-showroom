@@ -1,7 +1,7 @@
 import { previewImport, readImportRows, exportUnitsCsv } from "@/lib/domain/csv";
 import { uid } from "@/lib/domain/ids";
 import { can, canAccessProject, canSeeLead } from "@/lib/domain/permissions";
-import { adjustPrice, quoteUnit, resolveUnitPrice } from "@/lib/domain/pricing";
+import { adjustPrice, planIsValid, quoteUnit, resolveUnitPrice } from "@/lib/domain/pricing";
 import {
   approveStatusRequest,
   cancelStatusRequest,
@@ -1292,7 +1292,7 @@ export function updateProject(
   db: Database,
   actor: Actor,
   projectId: string,
-  patch: Partial<Pick<Project, "nombre" | "descripcion" | "direccion" | "contacto" | "fecha_entrega" | "estado" | "lat" | "lng" | "redes">> & { settings?: Partial<Project["settings"]> },
+  patch: Partial<Pick<Project, "nombre" | "descripcion" | "direccion" | "contacto" | "fecha_entrega" | "estado" | "lat" | "lng" | "redes" | "dominio">> & { settings?: Partial<Project["settings"]> },
 ): OpResult {
   const project = requireProject(db, actor, projectId);
   requireAction(actor, "edit_project");
@@ -1308,6 +1308,7 @@ export function updateProject(
   if (patch.lat !== undefined) project.lat = patch.lat;
   if (patch.lng !== undefined) project.lng = patch.lng;
   if (patch.redes) project.redes = { ...(project.redes ?? {}), ...patch.redes };
+  if (patch.dominio !== undefined) project.dominio = patch.dominio?.trim() || null;
   if (patch.contacto) project.contacto = { ...project.contacto, ...patch.contacto };
   if (patch.settings) {
     if (patch.settings.request_expiry_hours != null) {
@@ -1444,6 +1445,117 @@ export function deleteTour(db: Database, actor: Actor, tourId: string): OpResult
   requireProject(db, actor, tour.project_id);
   requireAction(actor, "manage_media");
   db.tours = db.tours.filter((item) => item.id !== tourId);
+  return noResult();
+}
+
+export function savePlan(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  input: { id: string; nombre?: string; anticipo_pct?: number; cuotas?: number; saldo_posesion_pct?: number; refuerzos?: { pct: number; meses: number[] }[]; indice?: "ninguno" | "CAC"; indice_leyenda?: string | null; texto_legal?: string; moneda_cuotas?: "USD" | "ARS"; descuento_pct?: number },
+): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "edit_prices");
+  const plan = db.payment_plans.find((item) => item.id === input.id);
+  const list = plan ? db.price_lists.find((item) => item.id === plan.price_list_id && item.project_id === project.id) : undefined;
+  if (!plan || !list) throw new ServiceError("No encontramos el plan.", 404);
+  if (input.nombre) plan.nombre = input.nombre.trim();
+  if (input.anticipo_pct != null) plan.anticipo_pct = Number(input.anticipo_pct);
+  if (input.cuotas != null) plan.cuotas = Number(input.cuotas);
+  if (input.saldo_posesion_pct != null) plan.saldo_posesion_pct = Number(input.saldo_posesion_pct);
+  if (input.refuerzos) plan.refuerzos = input.refuerzos;
+  if (input.indice) plan.indice = input.indice;
+  if (input.indice_leyenda !== undefined) plan.indice_leyenda = input.indice_leyenda;
+  if (input.texto_legal != null) plan.texto_legal = input.texto_legal;
+  if (input.moneda_cuotas) plan.moneda_cuotas = input.moneda_cuotas;
+  if (input.descuento_pct != null) plan.descuento_pct = Number(input.descuento_pct);
+  if (!planIsValid(plan)) throw new ServiceError("El anticipo, los refuerzos y el saldo no pueden pasar de 100.");
+  return noResult();
+}
+
+export function saveProgress(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  input: { id?: string; fecha: string; titulo: string; descripcion?: string; imagen_url?: string | null },
+): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "edit_project");
+  const existing = input.id ? db.construction_updates.find((item) => item.id === input.id && item.project_id === project.id) : undefined;
+  if (existing) {
+    existing.fecha = input.fecha;
+    existing.titulo = input.titulo.trim();
+    existing.descripcion = input.descripcion ?? "";
+    existing.imagen_url = input.imagen_url ?? null;
+  } else {
+    db.construction_updates.push({
+      id: uid(),
+      project_id: project.id,
+      fecha: input.fecha,
+      titulo: input.titulo.trim(),
+      descripcion: input.descripcion ?? "",
+      imagen_url: input.imagen_url ?? null,
+      orden: db.construction_updates.filter((item) => item.project_id === project.id).length + 1,
+    });
+  }
+  return noResult();
+}
+
+export function deleteProgress(db: Database, actor: Actor, id: string): OpResult {
+  const row = db.construction_updates.find((item) => item.id === id);
+  if (!row) throw new ServiceError("No encontramos el avance.", 404);
+  requireProject(db, actor, row.project_id);
+  requireAction(actor, "edit_project");
+  db.construction_updates = db.construction_updates.filter((item) => item.id !== id);
+  return noResult();
+}
+
+export function saveSection(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  input: { id?: string; titulo: string; cuerpo?: string; visible?: boolean },
+): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "edit_project");
+  const existing = input.id ? db.custom_sections.find((item) => item.id === input.id && item.project_id === project.id) : undefined;
+  if (existing) {
+    existing.titulo = input.titulo.trim();
+    existing.cuerpo = input.cuerpo ?? "";
+    if (input.visible != null) existing.visible = input.visible;
+  } else {
+    db.custom_sections.push({
+      id: uid(),
+      project_id: project.id,
+      titulo: input.titulo.trim(),
+      cuerpo: input.cuerpo ?? "",
+      orden: db.custom_sections.filter((item) => item.project_id === project.id).length + 1,
+      visible: input.visible !== false,
+    });
+  }
+  return noResult();
+}
+
+export function deleteSection(db: Database, actor: Actor, id: string): OpResult {
+  const row = db.custom_sections.find((item) => item.id === id);
+  if (!row) throw new ServiceError("No encontramos la sección.", 404);
+  requireProject(db, actor, row.project_id);
+  requireAction(actor, "edit_project");
+  db.custom_sections = db.custom_sections.filter((item) => item.id !== id);
+  return noResult();
+}
+
+export function requestImprovement(db: Database, actor: Actor, projectId: string, input: { titulo: string; detalle: string }, now: Date): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "edit_project");
+  db.improvement_requests.push({
+    id: uid(),
+    project_id: project.id,
+    user_id: actor.id,
+    titulo: input.titulo.trim(),
+    detalle: input.detalle.trim(),
+    created_at: now.toISOString(),
+  });
   return noResult();
 }
 

@@ -94,6 +94,27 @@ export interface ProjectSettings {
   approver_user_ids: string[];
   /** Sin videos: solo las imágenes de cada escena. */
   showroom_lite?: boolean;
+  usd_ars?: number;
+  /** Factor orientativo del índice CAC sobre la última cuota. */
+  cac_factor?: number;
+  texto_legal?: string;
+  aviso_cookies?: string;
+  pasos?: string[];
+  brochure_url?: string;
+  logo_url?: string;
+  color_acento?: string;
+  titulo_publico?: string;
+  ga4_id?: string;
+  gtm_id?: string;
+  pixel_id?: string;
+  remarketing?: boolean;
+  ficha?: {
+    precio?: boolean;
+    whatsapp?: boolean;
+    compartir?: boolean;
+    pdf?: boolean;
+    ambientes?: boolean;
+  };
 }
 
 export interface ProjectContact {
@@ -384,6 +405,34 @@ export interface Overlay {
   orden: number;
 }
 
+export interface ConstructionUpdate {
+  id: string;
+  project_id: string;
+  fecha: string;
+  titulo: string;
+  descripcion: string;
+  imagen_url: string | null;
+  orden: number;
+}
+
+export interface CustomSection {
+  id: string;
+  project_id: string;
+  titulo: string;
+  cuerpo: string;
+  orden: number;
+  visible: boolean;
+}
+
+export interface ImprovementRequest {
+  id: string;
+  project_id: string;
+  user_id: string;
+  titulo: string;
+  detalle: string;
+  created_at: string;
+}
+
 export interface Viewpoint {
   id: string;
   project_id: string;
@@ -602,6 +651,9 @@ export interface Database {
   broker_projects: BrokerProject[];
   quotations: Quotation[];
   viewpoints: Viewpoint[];
+  construction_updates: ConstructionUpdate[];
+  custom_sections: CustomSection[];
+  improvement_requests: ImprovementRequest[];
   overlays: Overlay[];
   leads: Lead[];
   lead_activities: LeadActivity[];

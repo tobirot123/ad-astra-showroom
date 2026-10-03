@@ -158,7 +158,7 @@ values
 
 insert into public.projects (id, organization_id, nombre, slug, dominio, estado, moneda, descripcion, direccion, fecha_entrega, contacto, settings, locale, idiomas, monedas, lat, lng, redes, updated_at)
 values
-  ('10000000-0000-4000-8000-000000000014', '10000000-0000-4000-8000-00000000000a', 'ALBA', 'alba', null, 'published', 'USD', 'Torre de 5 pisos frente al parque, con unidades de 2 y 3 ambientes. Datos de demostración para el showroom de Ad Astra.', 'Av. del Parque 1450, Rosario', '2027-12-01'::date, '{"whatsapp":"5493415550100","email":"comercial@nortedesarrollos.demo","telefono":"+54 341 555-0100"}'::jsonb, '{"request_expiry_hours":48,"public_pending_display":"available","lead_required_for_request":true,"escalate_to_superadmin":false,"approver_user_ids":[],"showroom_lite":false}'::jsonb, 'es', array['es']::text[], array['USD']::text[], -32.9442, -60.6505, '{"instagram":"https://instagram.com/adastrait","facebook":"https://facebook.com/adastrait"}'::jsonb, now());
+  ('10000000-0000-4000-8000-000000000014', '10000000-0000-4000-8000-00000000000a', 'ALBA', 'alba', null, 'published', 'USD', 'Torre de 5 pisos frente al parque, con unidades de 2 y 3 ambientes. Datos de demostración para el showroom de Ad Astra.', 'Av. del Parque 1450, Rosario', '2027-12-01'::date, '{"whatsapp":"5493415550100","email":"comercial@nortedesarrollos.demo","telefono":"+54 341 555-0100"}'::jsonb, '{"request_expiry_hours":48,"public_pending_display":"available","lead_required_for_request":true,"escalate_to_superadmin":false,"approver_user_ids":[],"usd_ars":1450,"cac_factor":1.08,"texto_legal":"Precios orientativos en dólares. Las imágenes son ilustrativas y pueden diferir de la obra.","aviso_cookies":"Usamos cookies para medir visitas y, si aceptás, para remarketing.","pasos":["Reservá con seña","Firmá el boleto","Pagá las cuotas","Escriturá en la posesión"],"brochure_url":"/demo/brochure.pdf","color_acento":"#c4a574","titulo_publico":"ALBA","ga4_id":"","gtm_id":"","pixel_id":"","remarketing":false,"ficha":{"precio":true,"whatsapp":true,"compartir":true,"pdf":true,"ambientes":true},"showroom_lite":false}'::jsonb, 'es', array['es']::text[], array['USD']::text[], -32.9442, -60.6505, '{"instagram":"https://instagram.com/adastrait","facebook":"https://facebook.com/adastrait"}'::jsonb, now());
 
 insert into public.buildings (id, project_id, nombre, tipo, parent_id, orden)
 values
@@ -254,20 +254,20 @@ values
 
 insert into public.media (id, project_id, tipo, carpeta, nombre, url, variantes, peso, ancho, alto, estado_proceso, aviso, tags, created_at)
 values
-  ('10000000-0000-4000-8000-000000000190', '10000000-0000-4000-8000-000000000014', 'imagen', 'fachada', 'Fachada Torre A', '/demo/fachada.svg', '[{"nombre":"original","url":"/demo/fachada.svg","ancho":800}]'::jsonb, 12000, 800, 1100, 'listo', null, array['fachada']::text[], now()),
-  ('10000000-0000-4000-8000-000000000191', '10000000-0000-4000-8000-000000000014', 'plano', 'planos', 'Plano 2 ambientes', '/demo/plano-2amb.svg', '[{"nombre":"original","url":"/demo/plano-2amb.svg","ancho":800}]'::jsonb, 12000, 800, 640, 'listo', null, array['planos']::text[], now()),
-  ('10000000-0000-4000-8000-000000000192', '10000000-0000-4000-8000-000000000014', 'plano', 'planos', 'Plano 3 ambientes', '/demo/plano-3amb.svg', '[{"nombre":"original","url":"/demo/plano-3amb.svg","ancho":800}]'::jsonb, 12000, 800, 640, 'listo', null, array['planos']::text[], now()),
-  ('10000000-0000-4000-8000-000000000193', '10000000-0000-4000-8000-000000000014', 'imagen', 'renders', 'Living', '/demo/render-living.svg', '[{"nombre":"original","url":"/demo/render-living.svg","ancho":800}]'::jsonb, 12000, 800, 640, 'listo', null, array['renders']::text[], now()),
-  ('10000000-0000-4000-8000-000000000194', '10000000-0000-4000-8000-000000000014', 'imagen', 'renders', 'Cocina', '/demo/render-cocina.svg', '[{"nombre":"original","url":"/demo/render-cocina.svg","ancho":800}]'::jsonb, 12000, 800, 640, 'listo', null, array['renders']::text[], now()),
-  ('10000000-0000-4000-8000-0000000003d4', '10000000-0000-4000-8000-000000000014', 'imagen', 'portada', 'Portada', '/demo/portada.svg', '[{"nombre":"original","url":"/demo/portada.svg","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['portada']::text[], now()),
-  ('10000000-0000-4000-8000-0000000003d5', '10000000-0000-4000-8000-000000000014', 'imagen', 'aereo', 'Vista aérea', '/demo/aereo.svg', '[{"nombre":"original","url":"/demo/aereo.svg","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['aereo']::text[], now()),
-  ('10000000-0000-4000-8000-0000000003d6', '10000000-0000-4000-8000-000000000014', 'imagen', 'barrio', 'Barrio', '/demo/barrio.svg', '[{"nombre":"original","url":"/demo/barrio.svg","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['barrio']::text[], now()),
-  ('10000000-0000-4000-8000-0000000003d7', '10000000-0000-4000-8000-000000000014', 'imagen', 'fachada', 'Fachada Torre B', '/demo/fachada-b.svg', '[{"nombre":"original","url":"/demo/fachada-b.svg","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['fachada']::text[], now()),
-  ('10000000-0000-4000-8000-0000000003d8', '10000000-0000-4000-8000-000000000014', 'plano', 'planos', 'Planta Torre A', '/demo/plano-piso.svg', '[{"nombre":"original","url":"/demo/plano-piso.svg","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['planos']::text[], now()),
-  ('10000000-0000-4000-8000-0000000003d9', '10000000-0000-4000-8000-000000000014', 'plano', 'planos', 'Planta Torre B', '/demo/plano-piso-b.svg', '[{"nombre":"original","url":"/demo/plano-piso-b.svg","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['planos']::text[], now()),
-  ('10000000-0000-4000-8000-0000000003da', '10000000-0000-4000-8000-000000000014', 'imagen', 'masterplan', 'Masterplan', '/demo/masterplan.svg', '[{"nombre":"original","url":"/demo/masterplan.svg","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['masterplan']::text[], now()),
-  ('10000000-0000-4000-8000-0000000003db', '10000000-0000-4000-8000-000000000014', 'imagen', 'tours', 'Panorama del living', '/demo/panorama.svg', '[{"nombre":"original","url":"/demo/panorama.svg","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['tours']::text[], now()),
-  ('10000000-0000-4000-8000-0000000003dc', '10000000-0000-4000-8000-000000000014', 'imagen', 'vistas', 'Vista desde la altura', '/demo/vista-altura.svg', '[{"nombre":"original","url":"/demo/vista-altura.svg","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['vistas']::text[], now()),
+  ('10000000-0000-4000-8000-000000000190', '10000000-0000-4000-8000-000000000014', 'imagen', 'fachada', 'Fachada Torre A', '/demo/fachada.webp', '[{"nombre":"original","url":"/demo/fachada.webp","ancho":800}]'::jsonb, 12000, 800, 1100, 'listo', null, array['fachada']::text[], now()),
+  ('10000000-0000-4000-8000-000000000191', '10000000-0000-4000-8000-000000000014', 'plano', 'planos', 'Plano 2 ambientes', '/demo/plano-2amb.webp', '[{"nombre":"original","url":"/demo/plano-2amb.webp","ancho":800}]'::jsonb, 12000, 800, 640, 'listo', null, array['planos']::text[], now()),
+  ('10000000-0000-4000-8000-000000000192', '10000000-0000-4000-8000-000000000014', 'plano', 'planos', 'Plano 3 ambientes', '/demo/plano-3amb.webp', '[{"nombre":"original","url":"/demo/plano-3amb.webp","ancho":800}]'::jsonb, 12000, 800, 640, 'listo', null, array['planos']::text[], now()),
+  ('10000000-0000-4000-8000-000000000193', '10000000-0000-4000-8000-000000000014', 'imagen', 'renders', 'Living', '/demo/render-living.webp', '[{"nombre":"original","url":"/demo/render-living.webp","ancho":800}]'::jsonb, 12000, 800, 640, 'listo', null, array['renders']::text[], now()),
+  ('10000000-0000-4000-8000-000000000194', '10000000-0000-4000-8000-000000000014', 'imagen', 'renders', 'Cocina', '/demo/render-cocina.webp', '[{"nombre":"original","url":"/demo/render-cocina.webp","ancho":800}]'::jsonb, 12000, 800, 640, 'listo', null, array['renders']::text[], now()),
+  ('10000000-0000-4000-8000-0000000003d4', '10000000-0000-4000-8000-000000000014', 'imagen', 'portada', 'Portada', '/demo/portada.webp', '[{"nombre":"original","url":"/demo/portada.webp","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['portada']::text[], now()),
+  ('10000000-0000-4000-8000-0000000003d5', '10000000-0000-4000-8000-000000000014', 'imagen', 'aereo', 'Vista aérea', '/demo/aereo.webp', '[{"nombre":"original","url":"/demo/aereo.webp","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['aereo']::text[], now()),
+  ('10000000-0000-4000-8000-0000000003d6', '10000000-0000-4000-8000-000000000014', 'imagen', 'barrio', 'Barrio', '/demo/barrio.webp', '[{"nombre":"original","url":"/demo/barrio.webp","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['barrio']::text[], now()),
+  ('10000000-0000-4000-8000-0000000003d7', '10000000-0000-4000-8000-000000000014', 'imagen', 'fachada', 'Fachada Torre B', '/demo/fachada-b.webp', '[{"nombre":"original","url":"/demo/fachada-b.webp","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['fachada']::text[], now()),
+  ('10000000-0000-4000-8000-0000000003d8', '10000000-0000-4000-8000-000000000014', 'plano', 'planos', 'Planta Torre A', '/demo/plano-piso.webp', '[{"nombre":"original","url":"/demo/plano-piso.webp","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['planos']::text[], now()),
+  ('10000000-0000-4000-8000-0000000003d9', '10000000-0000-4000-8000-000000000014', 'plano', 'planos', 'Planta Torre B', '/demo/plano-piso-b.webp', '[{"nombre":"original","url":"/demo/plano-piso-b.webp","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['planos']::text[], now()),
+  ('10000000-0000-4000-8000-0000000003da', '10000000-0000-4000-8000-000000000014', 'imagen', 'masterplan', 'Masterplan', '/demo/masterplan.webp', '[{"nombre":"original","url":"/demo/masterplan.webp","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['masterplan']::text[], now()),
+  ('10000000-0000-4000-8000-0000000003db', '10000000-0000-4000-8000-000000000014', 'imagen', 'tours', 'Panorama del living', '/demo/panorama.webp', '[{"nombre":"original","url":"/demo/panorama.webp","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['tours']::text[], now()),
+  ('10000000-0000-4000-8000-0000000003dc', '10000000-0000-4000-8000-000000000014', 'imagen', 'vistas', 'Vista desde la altura', '/demo/vista-altura.webp', '[{"nombre":"original","url":"/demo/vista-altura.webp","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['vistas']::text[], now()),
   ('10000000-0000-4000-8000-0000000003dd', '10000000-0000-4000-8000-000000000014', 'video', 'videos', 'Vuelo de introducción', '/demo/vuelo-intro.mp4', '[{"nombre":"original","url":"/demo/vuelo-intro.mp4","ancho":1200}]'::jsonb, 20000, 1200, 800, 'listo', null, array['videos']::text[], now());
 
 insert into public.media_links (id, media_id, entidad, entidad_id, rol, orden)
@@ -708,16 +708,25 @@ values
 
 insert into public.viewpoints (id, project_id, building_id, nombre, tipo, orden, imagen_url, video_url)
 values
-  ('10000000-0000-4000-8000-0000000003ac', '10000000-0000-4000-8000-000000000014', null, 'Portada', 'portada', 0, '/demo/portada.svg', null),
-  ('10000000-0000-4000-8000-0000000003ad', '10000000-0000-4000-8000-000000000014', null, 'Vista aérea', 'aereo', 1, '/demo/aereo.svg', '/demo/vuelo-intro.mp4'),
-  ('10000000-0000-4000-8000-0000000003ae', '10000000-0000-4000-8000-000000000014', null, 'Barrio', 'barrio', 2, '/demo/barrio.svg', null),
-  ('10000000-0000-4000-8000-0000000003af', '10000000-0000-4000-8000-000000000014', '10000000-0000-4000-8000-00000000001e', 'Torre A', 'exterior', 3, '/demo/fachada.svg', null),
-  ('10000000-0000-4000-8000-0000000003b0', '10000000-0000-4000-8000-000000000014', '10000000-0000-4000-8000-000000000384', 'Torre B', 'exterior', 4, '/demo/fachada-b.svg', null),
-  ('10000000-0000-4000-8000-0000000003b1', '10000000-0000-4000-8000-000000000014', '10000000-0000-4000-8000-000000000385', 'Loteo', 'masterplan', 5, '/demo/masterplan.svg', null);
+  ('10000000-0000-4000-8000-0000000003ac', '10000000-0000-4000-8000-000000000014', null, 'Portada', 'portada', 0, '/demo/portada.webp', null),
+  ('10000000-0000-4000-8000-0000000003ad', '10000000-0000-4000-8000-000000000014', null, 'Vista aérea', 'aereo', 1, '/demo/aereo.webp', '/demo/vuelo-intro.mp4'),
+  ('10000000-0000-4000-8000-0000000003ae', '10000000-0000-4000-8000-000000000014', null, 'Barrio', 'barrio', 2, '/demo/barrio.webp', null),
+  ('10000000-0000-4000-8000-0000000003af', '10000000-0000-4000-8000-000000000014', '10000000-0000-4000-8000-00000000001e', 'Torre A', 'exterior', 3, '/demo/fachada.webp', null),
+  ('10000000-0000-4000-8000-0000000003b0', '10000000-0000-4000-8000-000000000014', '10000000-0000-4000-8000-000000000384', 'Torre B', 'exterior', 4, '/demo/fachada-b.webp', null),
+  ('10000000-0000-4000-8000-0000000003b1', '10000000-0000-4000-8000-000000000014', '10000000-0000-4000-8000-000000000385', 'Loteo', 'masterplan', 5, '/demo/masterplan.webp', null);
+
+insert into public.construction_updates (id, project_id, fecha, titulo, descripcion, imagen_url, orden)
+values
+  ('10000000-0000-4000-8000-0000000005dd', '10000000-0000-4000-8000-000000000014', '2026-03-01', 'Excavación y fundaciones', 'Platea terminada y columnas del subsuelo encofradas.', '/demo/vista-altura.webp', 1),
+  ('10000000-0000-4000-8000-0000000005de', '10000000-0000-4000-8000-000000000014', '2026-07-15', 'Estructura hasta el piso 3', 'Losas de los primeros tres niveles hormigonadas.', '/demo/fachada.webp', 2);
+
+insert into public.custom_sections (id, project_id, titulo, cuerpo, orden, visible)
+values
+  ('10000000-0000-4000-8000-0000000005e6', '10000000-0000-4000-8000-000000000014', 'Cómo comprar', 'La reserva se confirma con una seña. El boleto se firma dentro de los 30 días. Las cuotas y el saldo se detallan en la cotización.', 1, true);
 
 insert into public.tours (id, project_id, entidad, entidad_id, proveedor, url, titulo, orden)
 values
-  ('10000000-0000-4000-8000-0000000003c0', '10000000-0000-4000-8000-000000000014', 'typology', '10000000-0000-4000-8000-000000000028', 'url', '/demo/panorama.svg', 'Living en 360', 1);
+  ('10000000-0000-4000-8000-0000000003c0', '10000000-0000-4000-8000-000000000014', 'typology', '10000000-0000-4000-8000-000000000028', 'url', '/demo/panorama.webp', 'Living en 360', 1);
 
 insert into public.points_of_interest (id, project_id, nombre, categoria, lat, lng, distancia_m, descripcion, orden)
 values

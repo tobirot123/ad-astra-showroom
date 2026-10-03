@@ -1,26 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
-  <defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1a2430"/>
-      <stop offset="0.45" stop-color="#8d5a3c"/>
-      <stop offset="1" stop-color="#e7c7a4"/>
-    </linearGradient>
-  </defs>
-  <rect width="1600" height="900" fill="url(#sky)"/>
-  <circle cx="1180" cy="210" r="70" fill="#f3d7b0" opacity="0.85"/>
-  <rect y="620" width="1600" height="280" fill="#2c3330"/>
-  <rect y="700" width="1600" height="40" fill="#3d4a40"/>
-  <g fill="#241c17">
-    <rect x="430" y="280" width="150" height="420"/>
-    <rect x="610" y="220" width="170" height="480"/>
-    <rect x="820" y="300" width="140" height="400"/>
-  </g>
-  <g fill="#c5d5df" opacity="0.55">
-    <rect x="455" y="310" width="28" height="40"/>
-    <rect x="500" y="310" width="28" height="40"/>
-    <rect x="545" y="310" width="18" height="40"/>
-    <rect x="640" y="250" width="30" height="36"/>
-    <rect x="690" y="250" width="30" height="36"/>
-    <rect x="740" y="250" width="22" height="36"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#1a2836"/>
+        <stop offset="0.55" stop-color="#b86a48"/>
+        <stop offset="1" stop-color="#f0d2b4"/>
+      </linearGradient>
+    </defs>
+    <rect width="1600" height="900" fill="url(#sky)"/>
+    <circle cx="1180" cy="180" r="64" fill="#f8e2c4"/>
+    <rect y="640" width="1600" height="260" fill="#243028"/>
+    <rect y="700" width="1600" height="28" fill="#3d4a40"/>
+    <g fill="#1b1613">
+      <rect x="250" y="250" width="180" height="470"/>
+      <rect x="470" y="180" width="210" height="540"/>
+      <rect x="720" y="280" width="160" height="440"/>
+    </g>
+    <g fill="#d5e4ec" opacity="0.55">
+      <rect x="500" y="220" width="28" height="40"/><rect x="548" y="220" width="28" height="40"/><rect x="596" y="220" width="28" height="40"/><rect x="500" y="290" width="28" height="40"/><rect x="548" y="290" width="28" height="40"/><rect x="596" y="290" width="28" height="40"/><rect x="500" y="360" width="28" height="40"/><rect x="548" y="360" width="28" height="40"/><rect x="596" y="360" width="28" height="40"/><rect x="500" y="430" width="28" height="40"/><rect x="548" y="430" width="28" height="40"/><rect x="596" y="430" width="28" height="40"/><rect x="500" y="500" width="28" height="40"/><rect x="548" y="500" width="28" height="40"/><rect x="596" y="500" width="28" height="40"/>
+    </g>
+  </svg>

@@ -25,6 +25,7 @@ export async function POST(request: Request) {
     unitId?: string | null;
     utm?: { utm_source?: string; utm_medium?: string; utm_campaign?: string; referrer?: string };
     width?: number;
+    props?: Record<string, unknown>;
   };
   if (!body.slug || !body.nombre || !body.visitorId || !body.sessionId) {
     return NextResponse.json({ ok: false }, { status: 400 });
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
       visitor_id: body.visitorId!,
       session_id: body.sessionId!,
       nombre: body.nombre!,
-      props: {},
+      props: body.props && typeof body.props === "object" ? body.props : {},
       unit_id: body.unitId ?? null,
       device: deviceFromUa(ua, body.width),
       utm_source: body.utm?.utm_source ?? null,

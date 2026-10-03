@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/admin", label: "Métricas", action: "view_metrics" as const },
   { href: "/admin/proyectos", label: "Proyecto", action: "edit_project" as const },
   { href: "/admin/unidades", label: "Unidades", action: "export_units" as const },
+  { href: "/admin/comercial", label: "Comercial", action: "edit_prices" as const },
   { href: "/admin/campos", label: "Campos", action: "edit_custom_fields" as const },
   { href: "/admin/medios", label: "Medios", action: "manage_media" as const },
   { href: "/admin/zonas", label: "Zonas", action: "edit_overlays" as const },
@@ -18,7 +19,10 @@ const LINKS = [
   { href: "/admin/solicitudes", label: "Solicitudes", action: "request_status" as const },
   { href: "/admin/leads", label: "Leads", action: "view_leads" as const },
   { href: "/admin/historial", label: "Historial", action: "view_audit" as const },
+  { href: "/admin/obra", label: "Obra", action: "edit_project" as const },
+  { href: "/admin/marca", label: "Marca", action: "edit_project" as const },
   { href: "/admin/integraciones", label: "Integraciones", action: "manage_integrations" as const },
+  { href: "/admin/ayuda", label: "Ayuda", action: "export_units" as const },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {

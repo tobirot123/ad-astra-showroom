@@ -18,7 +18,7 @@ describe("showroom M2", () => {
     expect(showroom?.scenes.find((scene) => scene.tipo === "aereo")?.video_url).toBe("/demo/vuelo-intro.mp4");
     expect(showroom?.buildings.map((building) => building.nombre)).toEqual(["Torre A", "Torre B", "Loteo del parque"]);
     expect(showroom?.units.find((unit) => unit.codigo === "L6")?.estado).toBe("pausa");
-    expect(showroom?.units.find((unit) => unit.codigo === "1A")?.tour?.url).toBe("/demo/panorama.svg");
+    expect(showroom?.units.find((unit) => unit.codigo === "1A")?.tour?.url).toBe("/demo/panorama.webp");
     expect(showroom?.pois.length).toBeGreaterThan(0);
     const source = readFileSync("src/components/showroom/showroom-app.tsx", "utf8");
     expect(source).not.toContain("direct_status");

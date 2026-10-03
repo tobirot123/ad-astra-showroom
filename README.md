@@ -91,6 +91,10 @@ Sin `RESEND_API_KEY` los avisos quedan en la campana del panel.
 
 La API key de Tokko y el secreto del webhook se cargan por proyecto en Integraciones. No van al cliente: el panel muestra solo los últimos caracteres.
 
+## Renders de demostración
+
+Los archivos de `public/demo/` son ilustraciones de reemplazo, con la misma proporción que los polígonos. `public/demo/slots.json` lista cada archivo. Para usar un render real: reemplazá el archivo (mismo nombre y proporción) o subilo en Medios y apuntalo desde Recorrido o Zonas. Si la fachada nueva no coincide con la grilla de ventanas, redibujá los polígonos. `npm run assets` regenera las ilustraciones de demostración.
+
 ## Recorrido público
 
 El visitante no ve un listado de unidades. Entra por la portada, recorre las escenas (aérea, barrio, fachadas, masterplan), elige un piso y abre la ficha desde el polígono de la planta. Los filtros atenúan lo que no coincide. El estado lo cambia solo el panel: la vendedora pide reservar, vender o liberar, y el admin aprueba. “En pausa” es un cambio directo del admin.
@@ -100,5 +104,6 @@ El visitante no ve un listado de unidades. Entra por la portada, recorre las esc
 - Organizaciones, roles, proyectos, tipologías, unidades, campos a medida, listas de precio, medios, polígonos, leads, solicitudes de estado, auditoría y eventos, con RLS.
 - Panel: login, proyecto, unidades con edición masiva y CSV, campos, medios, zonas por fachada o planta, recorrido, lugares (mapa y tours), cola de aprobación, CRM liviano, historial e integraciones.
 - Showroom: portada, video de transición (con modo solo imágenes), varias torres y loteo, plantas con zoom, galería, amenities, mapa, WhatsApp, compartir y comparador.
+- Comercial: listas y planes de pago, cotizador (anticipo, cuotas, refuerzos, saldo, USD/ARS y CAC), PDF de cotización y de ficha con QR, brochure, avance de obra, secciones, textos legales, cookies, marca, dominio pedido, tutoriales, GA4, GTM, píxel, remarketing, Tokko, webhook y tiempo en pantalla por unidad.
 
-El inventario de la competencia está en `docs/inventario-funciones-competencia.md`. El hito 1 cubre las funciones de panel y ficha. Este hito suma el showroom completo (funciones 1–17, 25, 31–40, 45–52, 77–79 y 86). Quedan para más adelante idiomas, cotizaciones y brokers, que ya tienen tablas vacías en `20261002230000_forward_compat.sql`.
+El inventario de la competencia está en `docs/inventario-funciones-competencia.md`. El hito 1 cubre el panel y la ficha. El hito 2 suma el showroom completo. El hito 3 cierra el cotizador, los documentos y la medición. Quedan para más adelante idiomas, brokers y el dominio autogestionado.

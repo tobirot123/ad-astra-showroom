@@ -105,7 +105,7 @@ export function buildShowroom(db: Database, slug: string) {
     .sort((a, b) => a.piso_numero - b.piso_numero || a.codigo.localeCompare(b.codigo, "es"));
 
   const facade = db.media_links.find((l) => l.entidad === "project" && l.entidad_id === project.id && l.rol === "fachada");
-  const facadeUrl = facade ? db.media.find((m) => m.id === facade.media_id)?.url ?? "/demo/fachada.svg" : "/demo/fachada.svg";
+  const facadeUrl = facade ? db.media.find((m) => m.id === facade.media_id)?.url ?? "/demo/fachada.webp" : "/demo/fachada.webp";
 
   const publishedOverlays = db.overlays
     .filter((overlay) => overlay.project_id === project.id && overlay.estado === "published")
@@ -197,6 +197,27 @@ export function buildShowroom(db: Database, slug: string) {
       lng: project.lng ?? null,
       redes: project.redes ?? {},
       lite: Boolean(project.settings.showroom_lite),
+      legal: project.settings.texto_legal ?? "",
+      cookies: project.settings.aviso_cookies ?? "",
+      pasos: project.settings.pasos ?? [],
+      brochure: project.settings.brochure_url ?? null,
+      logo: project.settings.logo_url ?? null,
+      acento: project.settings.color_acento ?? "#c4a574",
+      titulo: project.settings.titulo_publico || project.nombre,
+      usdArs: project.settings.usd_ars ?? 1450,
+      cac: project.settings.cac_factor ?? 1,
+      ga4: project.settings.ga4_id ?? "",
+      gtm: project.settings.gtm_id ?? "",
+      pixel: project.settings.pixel_id ?? "",
+      remarketing: Boolean(project.settings.remarketing),
+      ficha: {
+        precio: project.settings.ficha?.precio !== false,
+        whatsapp: project.settings.ficha?.whatsapp !== false,
+        compartir: project.settings.ficha?.compartir !== false,
+        pdf: project.settings.ficha?.pdf !== false,
+        ambientes: project.settings.ficha?.ambientes !== false,
+      },
+      dominio: project.dominio,
     },
     organization: {
       nombre: org?.nombre ?? "",
@@ -221,6 +242,31 @@ export function buildShowroom(db: Database, slug: string) {
       })),
     gallery,
     units,
+    plans: db.payment_plans
+      .filter((plan) => db.price_lists.some((list) => list.id === plan.price_list_id && list.project_id === project.id && list.visibilidad === "public"))
+      .map((plan) => ({
+        id: plan.id,
+        nombre: plan.nombre,
+        price_list_id: plan.price_list_id,
+        lista: db.price_lists.find((list) => list.id === plan.price_list_id)?.nombre ?? "",
+        anticipo_pct: plan.anticipo_pct,
+        cuotas: plan.cuotas,
+        periodicidad: plan.periodicidad,
+        moneda_cuotas: plan.moneda_cuotas,
+        refuerzos: plan.refuerzos,
+        saldo_posesion_pct: plan.saldo_posesion_pct,
+        indice: plan.indice,
+        indice_leyenda: plan.indice_leyenda,
+        descuento_pct: plan.descuento_pct,
+        texto_legal: plan.texto_legal,
+        anticipo_min: plan.anticipo_min,
+      })),
+    progress: db.construction_updates
+      .filter((item) => item.project_id === project.id)
+      .sort((a, b) => a.fecha.localeCompare(b.fecha)),
+    sections: db.custom_sections
+      .filter((item) => item.project_id === project.id && item.visible)
+      .sort((a, b) => a.orden - b.orden),
     filters: {
       ambientes: [...new Set(units.map((u) => u.ambientes).filter((n): n is number => n != null))].sort(),
       orientaciones: [...new Set(units.map((u) => u.orientacion).filter((n): n is string => Boolean(n)))],
@@ -242,7 +288,7 @@ export function buildPublic(db: Database, slug: string) {
         descripcion: project.descripcion,
         direccion: project.direccion,
         contacto: project.contacto,
-        imagen: cover?.imagen_url ?? "/demo/portada.svg",
+        imagen: cover?.imagen_url ?? "/demo/portada.webp",
       },
     };
   }
@@ -358,6 +404,9 @@ export function buildBootstrap(db: Database, actor: Actor, now: Date) {
     media_links: db.media_links.filter((l) => db.media.some((m) => m.id === l.media_id && m.project_id === project.id)),
     overlays: inProject(db.overlays),
     viewpoints: inProject(db.viewpoints).sort((a, b) => a.orden - b.orden),
+    construction_updates: inProject(db.construction_updates).sort((a, b) => a.fecha.localeCompare(b.fecha)),
+    custom_sections: inProject(db.custom_sections).sort((a, b) => a.orden - b.orden),
+    improvement_requests: inProject(db.improvement_requests).sort((a, b) => b.created_at.localeCompare(a.created_at)),
     points_of_interest: inProject(db.points_of_interest).sort((a, b) => a.orden - b.orden),
     tours: inProject(db.tours).sort((a, b) => a.orden - b.orden),
     galleries: inProject(db.galleries).sort((a, b) => a.orden - b.orden),

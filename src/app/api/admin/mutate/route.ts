@@ -21,11 +21,17 @@ import {
   rejectRequest,
   revertInherit,
   deletePoi,
+  deleteProgress,
+  deleteSection,
   deleteTour,
   deleteViewpoint,
+  requestImprovement,
   saveIntegration,
   saveOverlays,
+  savePlan,
   savePoi,
+  saveProgress,
+  saveSection,
   saveTour,
   saveViewpoint,
   sweep,
@@ -134,6 +140,18 @@ function run(db: Database, actor: Actor, op: string, body: Record<string, unknow
       return saveTour(db, actor, projectId, (body.tour ?? {}) as never);
     case "delete_tour":
       return deleteTour(db, actor, String(body.tourId));
+    case "save_plan":
+      return savePlan(db, actor, projectId, (body.plan ?? {}) as never);
+    case "save_progress":
+      return saveProgress(db, actor, projectId, (body.progress ?? {}) as never);
+    case "delete_progress":
+      return deleteProgress(db, actor, String(body.progressId));
+    case "save_section":
+      return saveSection(db, actor, projectId, (body.section ?? {}) as never);
+    case "delete_section":
+      return deleteSection(db, actor, String(body.sectionId));
+    case "request_improvement":
+      return requestImprovement(db, actor, projectId, { titulo: String(body.titulo ?? ""), detalle: String(body.detalle ?? "") }, now);
     case "update_lead":
       return updateLead(db, actor, String(body.leadId), (body.patch ?? {}) as never, now);
     case "create_request":

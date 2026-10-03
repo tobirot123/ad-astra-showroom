@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { showQuote } from "@/lib/domain/finance";
 import { STATUS_COLOR, STATUS_LABEL, formatM2, formatNumber, formatUsd } from "@/lib/domain/format";
+import "./showroom.css";
 import { sortUnits, tourEmbed, unitMatches, videosToLoad, type FlowFilters } from "@/lib/domain/showroom-flow";
 import type { ShowroomData } from "@/lib/services/present";
 
 type Unit = ShowroomData["units"][number];
 type Overlay = ShowroomData["overlays"][number];
-type Sheet = null | "menu" | "filtros" | "galeria" | "amenities" | "mapa" | "info" | "comparar" | "tour" | "compartir" | "vista" | "acabados";
+type Sheet = null | "menu" | "filtros" | "galeria" | "amenities" | "mapa" | "info" | "comparar" | "tour" | "compartir" | "vista" | "acabados" | "obra" | "secciones" | "pasos";
 
 const EMPTY_FILTERS: FlowFilters = {
   estado: "todos",
@@ -88,6 +90,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [cookies, setCookies] = useState<"ask" | "yes" | "no">("ask");
   const [photo, setPhoto] = useState(0);
   const [matchCursor, setMatchCursor] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -135,6 +138,9 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     };
     if (fresh) send("session_start");
     send("page_view");
+    const consent = localStorage.getItem("adastra-cookies");
+    if (consent === "1") setCookies("yes");
+    else if (consent === "0") setCookies("no");
     const stored = sessionStorage.getItem("adastra-lite");
     if (stored === "1") setLite(true);
     if (stored === "0") setLite(false);
@@ -171,6 +177,29 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [entered, phase, sheet, unitId, walk.length]);
+
+  const activeId = active?.id;
+  useEffect(() => {
+    if (!activeId) return;
+    const started = Date.now();
+    const unitId = activeId;
+    return () => {
+      const segundos = Math.round((Date.now() - started) / 1000);
+      if (segundos < 1) return;
+      const { visitor, session } = identity();
+      const payload = JSON.stringify({
+        slug: data.project.slug,
+        nombre: "unit_dwell",
+        visitorId: visitor,
+        sessionId: session,
+        unitId,
+        props: { segundos },
+        utm: readUtm(),
+        width: window.innerWidth,
+      });
+      if (navigator.sendBeacon) navigator.sendBeacon("/api/track", new Blob([payload], { type: "application/json" }));
+    };
+  }, [activeId, data.project.slug]);
 
   function track(nombre: string, unit?: Unit | null, props?: Record<string, unknown>) {
     const { visitor, session } = identity();
@@ -354,7 +383,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const polygons = zones();
 
   return (
-    <main className="relative h-[100dvh] overflow-hidden bg-[#12110f] text-white" data-testid="showroom">
+    <main className="showroom relative h-[100dvh] overflow-hidden bg-[#12110f] text-white" data-testid="showroom" style={{ ["--accent" as string]: data.project.acento }}>
       <Stage
         stageRef={stageRef}
         src={image}
@@ -418,7 +447,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       <button
         type="button"
         aria-label="Menú"
-        className="absolute left-4 top-4 z-20 grid h-11 w-11 place-items-center rounded-full bg-[#c4a574] text-[#1c1915]"
+        className="menu-btn absolute left-4 top-4 z-20 grid h-11 w-11 place-items-center rounded-full text-[#1c1915]"
         onClick={() => setSheet(sheet === "menu" ? null : "menu")}
       >
         <span className="flex flex-col gap-1.5">
@@ -436,7 +465,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       )}
 
       <div className="absolute right-4 top-4 z-20 flex gap-2">
-        <button type="button" className="rounded-full bg-white/15 px-3 py-2 text-sm backdrop-blur" onClick={() => setSheet("filtros")}>Filtros</button>
+        <button type="button" className="glass rounded-full px-3 py-2 text-sm" onClick={() => setSheet("filtros")}>Filtros</button>
         {compare.length > 0 && (
           <button type="button" className="rounded-full bg-white px-3 py-2 text-sm text-[#1c1915]" onClick={() => setSheet("comparar")}>Comparar ({compare.length})</button>
         )}
@@ -445,14 +474,14 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       {!entered && (
         <div className="absolute inset-0 z-10 grid place-items-center px-6 text-center">
           <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-[#c4a574]">Showroom</p>
-            <h1 className="mt-3 font-serif text-6xl text-white drop-shadow md:text-8xl">{data.project.nombre}</h1>
+            <p className="eyebrow">Showroom</p>
+            <h1 className="wordmark mt-3 font-serif text-6xl text-white md:text-8xl">{data.project.titulo || data.project.nombre}</h1>
             <p className="mt-3 text-sm tracking-wide text-white/80">{data.project.direccion}</p>
           </div>
           <button
             type="button"
             data-testid="entrar"
-            className="absolute bottom-10 rounded-full bg-white px-10 py-3 text-sm tracking-[0.18em] text-[#1c1915] uppercase"
+            className="enter absolute bottom-10 rounded-full bg-white px-12 py-3.5 text-sm tracking-[0.22em] text-[#1c1915] uppercase"
             onClick={enter}
           >
             Entrar
@@ -462,13 +491,13 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
 
       {entered && phase === "escena" && walk.length > 1 && (
         <>
-          <button type="button" aria-label="Escena anterior" className="absolute left-3 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-2xl text-[#1c1915] md:grid" onClick={() => setSceneIndex((index) => (index - 1 + walk.length) % walk.length)}>‹</button>
-          <button type="button" aria-label="Escena siguiente" className="absolute right-16 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-2xl text-[#1c1915] md:grid" onClick={() => setSceneIndex((index) => (index + 1) % walk.length)}>›</button>
+          <button type="button" aria-label="Escena anterior" className="nav-arrow absolute left-3 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 place-items-center rounded-full text-2xl md:grid" onClick={() => setSceneIndex((index) => (index - 1 + walk.length) % walk.length)}>‹</button>
+          <button type="button" aria-label="Escena siguiente" className="nav-arrow absolute right-16 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 place-items-center rounded-full text-2xl md:grid" onClick={() => setSceneIndex((index) => (index + 1) % walk.length)}>›</button>
         </>
       )}
 
       {showRail && tower && (
-        <aside className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-1 rounded-full bg-black/55 px-1.5 py-2 backdrop-blur" data-testid="floor-rail">
+        <aside className="rail absolute right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-0.5 rounded-full px-1.5 py-2" data-testid="floor-rail">
           {tower.floors.map((item) => {
             const current = phase === "planta" && item.id === floorId;
             return (
@@ -488,13 +517,23 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       )}
 
       {entered && (
-        <div className="absolute inset-x-0 bottom-5 z-20 hidden justify-center gap-2 md:flex">
-          <button type="button" className="rounded-full bg-white/90 px-4 py-2 text-sm text-[#1c1915]" onClick={() => { const index = walk.findIndex((item) => item.tipo === "aereo"); if (index >= 0) { setSceneIndex(index); setPhase("escena"); } }}>Vista aérea</button>
+        <div className="context absolute inset-x-0 bottom-6 z-20 hidden justify-center gap-2 md:flex">
+          <button type="button" onClick={() => { const index = walk.findIndex((item) => item.tipo === "aereo"); if (index >= 0) { setSceneIndex(index); setPhase("escena"); } }}>Vista aérea</button>
           {building && building.floors[0] && (
-            <button type="button" className="rounded-full bg-white/90 px-4 py-2 text-sm text-[#1c1915]" onClick={() => openFloor(building.floors[0].id)}>Ver plantas</button>
+            <button type="button" onClick={() => openFloor(building.floors[0].id)}>Ver plantas</button>
           )}
-          <button type="button" className="rounded-full bg-white/90 px-4 py-2 text-sm text-[#1c1915]" onClick={() => setSheet("galeria")}>Galería</button>
+          <button type="button" onClick={() => setSheet("galeria")}>Galería</button>
+          {data.progress.length > 0 && <button type="button" onClick={() => setSheet("obra")}>Obra</button>}
+          {data.project.brochure && <a href={data.project.brochure} target="_blank" rel="noreferrer">Brochure</a>}
         </div>
+      )}
+
+      {entered && (phase === "planta" || scene?.tipo === "exterior" || scene?.tipo === "masterplan") && (
+        <ul className="legend" data-testid="legend">
+          {(["disponible", "reservada", "vendida", "pausa"] as const).map((estado) => (
+            <li key={estado}><i style={{ background: STATUS_COLOR[estado] }} />{STATUS_LABEL[estado]}</li>
+          ))}
+        </ul>
       )}
 
       {phase === "planta" && (
@@ -515,7 +554,8 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       {active && (
         <UnitPanel
           unit={active}
-          projectName={data.project.nombre}
+          project={data.project}
+          plans={data.plans}
           compared={compare.includes(active.id)}
           sent={sent}
           sending={sending}
@@ -536,6 +576,12 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       {sheet === "menu" && (
         <Menu
           lite={lite}
+          extras={[
+            ...(data.progress.length ? [["obra", "Avance de obra"] as [string, string]] : []),
+            ...(data.sections.length ? [["secciones", "Secciones"] as [string, string]] : []),
+            ...(data.project.pasos.length ? [["pasos", "Cómo se paga"] as [string, string]] : []),
+            ...(data.project.brochure ? [["brochure", "Brochure"] as [string, string]] : []),
+          ]}
           onClose={() => setSheet(null)}
           onPick={(action) => {
             setSheet(null);
@@ -569,6 +615,10 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
             if (action === "galeria") setSheet("galeria");
             if (action === "mapa") setSheet("mapa");
             if (action === "info") setSheet("info");
+            if (action === "obra") setSheet("obra");
+            if (action === "secciones") setSheet("secciones");
+            if (action === "pasos") setSheet("pasos");
+            if (action === "brochure" && data.project.brochure) window.open(data.project.brochure, "_blank", "noopener");
             if (action === "lite") {
               const next = !lite;
               setLite(next);
@@ -681,8 +731,54 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
               {copied && <p>Copiamos el link.</p>}
             </div>
           )}
+          {sheet === "obra" && (
+            <ol className="space-y-4">
+              {data.progress.map((item) => (
+                <li key={item.id}>
+                  {item.imagen_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={item.imagen_url} alt="" className="h-40 w-full rounded-2xl object-cover" />
+                  )}
+                  <p className="mt-2 text-xs uppercase tracking-[0.14em] text-[#9a6240]">{item.fecha}</p>
+                  <p className="font-serif text-2xl text-[#1c1915]">{item.titulo}</p>
+                  <p className="text-sm text-[#6b6258]">{item.descripcion}</p>
+                </li>
+              ))}
+            </ol>
+          )}
+          {sheet === "secciones" && (
+            <div className="space-y-5">
+              {data.sections.map((item) => (
+                <article key={item.id}>
+                  <h3 className="font-serif text-2xl text-[#1c1915]">{item.titulo}</h3>
+                  <p className="mt-1 text-sm text-[#1c1915]">{item.cuerpo}</p>
+                </article>
+              ))}
+            </div>
+          )}
+          {sheet === "pasos" && (
+            <ol className="space-y-3 text-sm text-[#1c1915]">
+              {data.project.pasos.map((paso, index) => (
+                <li key={paso} className="flex gap-3">
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-[#1c1915] text-xs text-white">{index + 1}</span>
+                  <span className="pt-1">{paso}</span>
+                </li>
+              ))}
+              {data.project.legal && <p className="pt-2 text-xs text-[#6b6258]">{data.project.legal}</p>}
+            </ol>
+          )}
         </Drawer>
       )}
+      {cookies === "ask" && data.project.cookies && (
+        <div className="cookie" data-testid="cookies">
+          <p className="max-w-xl text-sm">{data.project.cookies}</p>
+          <div className="flex gap-2">
+            <button type="button" className="chip" onClick={() => { localStorage.setItem("adastra-cookies", "0"); setCookies("no"); }}>Solo necesarias</button>
+            <button type="button" className="chip chip-solid" onClick={() => { localStorage.setItem("adastra-cookies", "1"); setCookies("yes"); }}>Aceptar</button>
+          </div>
+        </div>
+      )}
+      <Pixels project={data.project} accepted={cookies === "yes"} unitCode={active?.codigo ?? null} />
     </main>
   );
 }
@@ -699,6 +795,9 @@ function sheetTitle(sheet: Sheet) {
     vista: "Vista",
     acabados: "Acabados",
     compartir: "Compartir",
+    obra: "Avance de obra",
+    secciones: "Secciones",
+    pasos: "Cómo se paga",
   };
   return titles[sheet ?? ""] ?? "";
 }
@@ -800,7 +899,7 @@ function Stage({
   );
 }
 
-function Menu({ lite, onClose, onPick }: { lite: boolean; onClose: () => void; onPick: (action: string) => void }) {
+function Menu({ lite, extras, onClose, onPick }: { lite: boolean; extras: [string, string][]; onClose: () => void; onPick: (action: string) => void }) {
   const items = [
     ["intro", "Intro"],
     ["edificio", "El edificio"],
@@ -811,6 +910,7 @@ function Menu({ lite, onClose, onPick }: { lite: boolean; onClose: () => void; o
     ["galeria", "Galería"],
     ["mapa", "Ubicación"],
     ["info", "Contacto"],
+    ...extras,
   ];
   return (
     <div className="absolute inset-0 z-40 bg-[#12110f]/94">
@@ -828,7 +928,8 @@ function Menu({ lite, onClose, onPick }: { lite: boolean; onClose: () => void; o
 
 function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <aside className="absolute inset-x-0 bottom-0 z-30 max-h-[78vh] overflow-auto rounded-t-3xl bg-[#f6f1e8] p-5 text-[#1c1915] shadow-2xl md:inset-y-0 md:right-0 md:left-auto md:max-h-none md:w-[420px] md:rounded-none">
+    <aside className="drawer sheet absolute inset-x-0 bottom-0 z-30 max-h-[78vh] overflow-auto rounded-t-3xl p-5 text-[#1c1915] md:inset-y-0 md:right-0 md:left-auto md:max-h-none md:w-[420px] md:rounded-none">
+      <div className="handle" />
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-serif text-3xl">{title}</h2>
         <button type="button" onClick={onClose}>Cerrar</button>
@@ -911,9 +1012,61 @@ function TourBlock({ tour }: { tour: NonNullable<Unit["tour"]> }) {
   return <iframe title={tour.titulo} src={tour.url} className="h-80 w-full rounded-2xl border-0" allow="fullscreen; xr-spatial-tracking" />;
 }
 
+function moneyLabel(value: number, moneda: "USD" | "ARS") {
+  if (moneda === "USD") return formatUsd(value);
+  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(value);
+}
+
+function safeId(value: string, pattern: RegExp) {
+  return pattern.test(value) ? value : "";
+}
+
+function Pixels({ project, accepted, unitCode }: { project: ShowroomData["project"]; accepted: boolean; unitCode: string | null }) {
+  useEffect(() => {
+    if (!accepted) return;
+    const ga4 = safeId(project.ga4, /^G-[A-Z0-9]+$/);
+    const gtm = safeId(project.gtm, /^GTM-[A-Z0-9]+$/);
+    const pixel = safeId(project.pixel, /^\d{5,20}$/);
+    if (ga4 && !document.getElementById("adastra-ga4")) {
+      const src = document.createElement("script");
+      src.id = "adastra-ga4";
+      src.async = true;
+      src.src = `https://www.googletagmanager.com/gtag/js?id=${ga4}`;
+      document.head.appendChild(src);
+      const inline = document.createElement("script");
+      inline.id = "adastra-ga4-inline";
+      inline.text = `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${ga4}');`;
+      document.head.appendChild(inline);
+    }
+    if (gtm && !document.getElementById("adastra-gtm")) {
+      const inline = document.createElement("script");
+      inline.id = "adastra-gtm";
+      inline.text = `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${gtm}');`;
+      document.head.appendChild(inline);
+    }
+    if (pixel && !document.getElementById("adastra-pixel")) {
+      const inline = document.createElement("script");
+      inline.id = "adastra-pixel";
+      inline.text = `!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${pixel}');fbq('track','PageView');`;
+      document.head.appendChild(inline);
+    }
+  }, [accepted, project.ga4, project.gtm, project.pixel]);
+
+  useEffect(() => {
+    if (!accepted || !project.remarketing || !unitCode) return;
+    const pixel = safeId(project.pixel, /^\d{5,20}$/);
+    if (!pixel) return;
+    const fbq = (window as Window & { fbq?: (...args: unknown[]) => void }).fbq;
+    fbq?.("track", "ViewContent", { content_ids: [unitCode], content_type: "product" });
+  }, [accepted, project.remarketing, project.pixel, unitCode]);
+
+  return null;
+}
+
 function UnitPanel({
   unit,
-  projectName,
+  project,
+  plans,
   compared,
   sent,
   sending,
@@ -930,7 +1083,8 @@ function UnitPanel({
   onLead,
 }: {
   unit: Unit;
-  projectName: string;
+  project: ShowroomData["project"];
+  plans: ShowroomData["plans"];
   compared: boolean;
   sent: boolean;
   sending: boolean;
@@ -946,16 +1100,75 @@ function UnitPanel({
   setPhoto: (index: number) => void;
   onLead: (form: FormData) => void;
 }) {
+  const ficha = project.ficha;
   const photos = unit.renders.length ? unit.renders : unit.plano ? [unit.plano] : [];
   const current = photos[photo] ?? photos[0];
+  const [planId, setPlanId] = useState(plans[0]?.id ?? "");
+  const [buyer, setBuyer] = useState("");
+  const [mail, setMail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  useEffect(() => {
+    setPlanId(plans[0]?.id ?? "");
+    setNote("");
+  }, [unit.id, plans]);
+  const plan = plans.find((item) => item.id === planId) ?? plans[0];
+  const shown = ficha.precio && unit.precio != null && plan ? showQuote(unit.precio, plan, project.usdArs, project.cac) : null;
+
+  async function downloadQuote() {
+    if (!plan) return;
+    if (!buyer.trim()) {
+      setNote("Escribí un nombre para la cotización.");
+      return;
+    }
+    setBusy(true);
+    setNote("");
+    const response = await fetch("/api/public/cotizacion", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slug: project.slug, codigo: unit.codigo, planId: plan.id, nombre: buyer, email: mail }),
+    });
+    setBusy(false);
+    if (!response.ok) {
+      const json = await response.json().catch(() => ({}));
+      setNote(typeof json.error === "string" ? json.error : "No pudimos armar la cotización.");
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `cotizacion-${unit.codigo}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setNote(mail ? "Descargamos el PDF. Si el correo está activo, también se lo mandamos." : "Descargamos el PDF.");
+  }
+
+  async function emailSheet() {
+    if (!mail.trim()) {
+      setNote("Escribí un email para enviar la ficha.");
+      return;
+    }
+    setBusy(true);
+    const response = await fetch("/api/public/ficha", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slug: project.slug, codigo: unit.codigo, email: mail }),
+    });
+    const json = await response.json().catch(() => ({}));
+    setBusy(false);
+    setNote(typeof json.message === "string" ? json.message : "No pudimos enviar la ficha.");
+  }
+
   return (
-    <aside data-testid="unit-panel" className="absolute inset-x-0 bottom-0 z-30 max-h-[78vh] overflow-auto rounded-t-3xl bg-white text-[#1c1915] shadow-2xl md:inset-y-0 md:left-0 md:right-auto md:max-h-none md:w-[400px] md:rounded-none">
+    <aside data-testid="unit-panel" className="unit-card sheet absolute inset-x-0 bottom-0 z-30 max-h-[78vh] overflow-auto rounded-t-3xl text-[#1c1915] md:inset-y-0 md:left-0 md:right-auto md:max-h-none md:w-[400px] md:rounded-none">
+      <div className="handle md:hidden" />
       <div className="relative">
         {current && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={current} alt="" className="h-52 w-full object-cover" />
         )}
-        <button type="button" className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1 text-sm" onClick={onClose}>Cerrar</button>
+        <button type="button" className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1 text-sm shadow" onClick={onClose}>Cerrar</button>
         {photos.length > 1 && (
           <div className="absolute bottom-3 right-3 flex gap-1">
             {photos.map((url, index) => (
@@ -968,13 +1181,13 @@ function UnitPanel({
         <span className="inline-block rounded-full px-2 py-0.5 text-xs text-white" style={{ background: STATUS_COLOR[unit.estado] }}>{STATUS_LABEL[unit.estado]}</span>
         <h2 className="font-serif text-4xl">{unit.codigo}</h2>
         <p className="text-sm text-[#6b6258]">{unit.tipologia} · {unit.torre} · {unit.piso}</p>
-        <p className="text-2xl">{unit.mostrar_precio && unit.precio != null ? formatUsd(unit.precio) : "Consultar"}</p>
+        <p className="font-serif text-3xl">{ficha.precio && unit.mostrar_precio && unit.precio != null ? formatUsd(unit.precio) : "Consultar"}</p>
         <dl className="grid grid-cols-2 gap-2 text-sm">
           {unit.m2_totales != null && <div><dt className="text-[#6b6258]">Superficie</dt><dd>{formatM2(unit.m2_totales)} m²</dd></div>}
           {unit.dormitorios != null && <div><dt className="text-[#6b6258]">Dormitorios</dt><dd>{unit.dormitorios}</dd></div>}
           {unit.banos != null && <div><dt className="text-[#6b6258]">Baños</dt><dd>{unit.banos}</dd></div>}
           {unit.orientacion && <div><dt className="text-[#6b6258]">Orientación</dt><dd>{unit.orientacion}</dd></div>}
-          {unit.ambientes != null && <div><dt className="text-[#6b6258]">Ambientes</dt><dd>{unit.ambientes}</dd></div>}
+          {ficha.ambientes && unit.ambientes != null && <div><dt className="text-[#6b6258]">Ambientes</dt><dd>{unit.ambientes}</dd></div>}
           {unit.vista && <div><dt className="text-[#6b6258]">Vista</dt><dd>{unit.vista}</dd></div>}
         </dl>
         {unit.descripcion && <p className="text-sm">{unit.descripcion}</p>}
@@ -984,14 +1197,34 @@ function UnitPanel({
             <li key={field.clave}>{field.nombre}: {typeof field.value === "boolean" ? (field.value ? "sí" : "no") : typeof field.value === "number" ? `${formatNumber(field.value)}${field.unidad ? ` ${field.unidad}` : ""}` : String(field.value)}</li>
           ))}
         </ul>
-        {unit.quote && <p className="text-sm text-[#6b6258]">{unit.quote.plan}: cuota {formatUsd(unit.quote.quote.cuota)}. {unit.quote.legal}</p>}
-        <div className="flex flex-wrap gap-2 text-sm">
-          <button type="button" className="rounded-full bg-[#1f8a5b] px-4 py-2 text-white" onClick={onWhatsapp}>WhatsApp</button>
-          {unit.tour && <button type="button" className="rounded-full border border-[#e4d9c8] px-4 py-2" onClick={onTour}>Tour 360</button>}
-          {unit.vista_url && <button type="button" className="rounded-full border border-[#e4d9c8] px-4 py-2" onClick={onVista}>Vista</button>}
-          {unit.acabados.length > 0 && <button type="button" className="rounded-full border border-[#e4d9c8] px-4 py-2" onClick={onAcabados}>Acabados</button>}
-          <button type="button" className="rounded-full border border-[#e4d9c8] px-4 py-2" onClick={onCompare}>{compared ? "En el comparador" : "Comparar"}</button>
-          <button type="button" className="rounded-full border border-[#e4d9c8] px-4 py-2" onClick={onShare}>Compartir</button>
+        {shown && plan && (
+          <div className="space-y-2 rounded-2xl bg-white/70 p-3" data-testid="cotizador">
+            <label className="block text-sm">Esquema de pago
+              <select value={plan.id} onChange={(event) => setPlanId(event.target.value)} className="field mt-1">
+                {plans.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
+              </select>
+            </label>
+            <div className="quote-grid text-sm">
+              <div><p className="text-[#6b6258]">Anticipo</p><p>{moneyLabel(shown.anticipo, shown.moneda)}</p></div>
+              <div><p className="text-[#6b6258]">{plan.cuotas} cuotas</p><p>{moneyLabel(shown.cuota, shown.moneda)}</p></div>
+              <div><p className="text-[#6b6258]">Última cuota</p><p>{moneyLabel(shown.ultima, shown.moneda)}</p></div>
+              <div><p className="text-[#6b6258]">Saldo a posesión</p><p>{moneyLabel(shown.saldo, shown.moneda)}</p></div>
+            </div>
+            {shown.refuerzos.map((item) => (
+              <p key={item.meses.join("-")} className="text-xs text-[#6b6258]">Refuerzo {item.pct}% en el mes {item.meses.join(" y ")}: {moneyLabel(item.monto, shown.moneda)}</p>
+            ))}
+            {shown.indice && <p className="text-xs text-[#6b6258]">{shown.indice}</p>}
+            <p className="text-xs text-[#6b6258]">{shown.legal}</p>
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {ficha.whatsapp && <button type="button" className="chip chip-wa" onClick={onWhatsapp}>WhatsApp</button>}
+          {unit.tour && <button type="button" className="chip" onClick={onTour}>Tour 360</button>}
+          {unit.vista_url && <button type="button" className="chip" onClick={onVista}>Vista</button>}
+          {unit.acabados.length > 0 && <button type="button" className="chip" onClick={onAcabados}>Acabados</button>}
+          <button type="button" className="chip" onClick={onCompare}>{compared ? "En el comparador" : "Comparar"}</button>
+          {ficha.compartir && <button type="button" className="chip" onClick={onShare}>Compartir</button>}
+          {ficha.pdf && <a className="chip" href={`/api/public/ficha?slug=${project.slug}&codigo=${encodeURIComponent(unit.codigo)}`} target="_blank" rel="noreferrer">Ficha PDF</a>}
         </div>
         {unit.plano && photos[0] !== unit.plano && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -1003,11 +1236,24 @@ function UnitPanel({
             <input name="nombre" required placeholder="Nombre" className="w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
             <input name="email" type="email" placeholder="Email" className="w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
             <input name="telefono" placeholder="Teléfono" className="w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
-            <textarea name="mensaje" rows={2} placeholder={`Hola, quiero saber más de ${unit.codigo} en ${projectName}`} className="w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
+            <textarea name="mensaje" rows={2} placeholder={`Hola, quiero saber más de ${unit.codigo} en ${project.nombre}`} className="field" />
             {error && <p className="text-sm text-[#b42318]">{error}</p>}
-            <button disabled={sending} className="rounded-full bg-[#1c1915] px-4 py-2 text-sm text-white">{sending ? "Enviando…" : "Enviar consulta"}</button>
+            <button disabled={sending} className="chip chip-solid">{sending ? "Enviando…" : "Enviar consulta"}</button>
           </form>
         )}
+        {shown && (
+          <div className="space-y-2 border-t border-[#e4d9c8] pt-3">
+            <p className="text-sm font-medium">Cotización en PDF</p>
+            <input value={buyer} onChange={(event) => setBuyer(event.target.value)} placeholder="Nombre" className="field" />
+            <input value={mail} onChange={(event) => setMail(event.target.value)} type="email" placeholder="Email" className="field" />
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={busy} className="chip chip-accent" onClick={() => void downloadQuote()}>{busy ? "Armando…" : "Descargar cotización"}</button>
+              {ficha.pdf && <button type="button" disabled={busy} className="chip" onClick={() => void emailSheet()}>Enviar ficha</button>}
+            </div>
+            {note && <p className="text-xs text-[#6b6258]">{note}</p>}
+          </div>
+        )}
+        {project.legal && <p className="text-xs text-[#6b6258]">{project.legal}</p>}
       </div>
     </aside>
   );

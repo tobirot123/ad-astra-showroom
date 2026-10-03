@@ -1,0 +1,209 @@
+.showroom {
+  --accent: #c4a574;
+  --ink: #1c1915;
+  --paper: #f7f3ec;
+}
+
+.showroom::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(to bottom, rgba(12, 10, 8, 0.42), transparent 22%, transparent 72%, rgba(12, 10, 8, 0.38));
+}
+
+.showroom .menu-btn,
+.showroom .nav-arrow,
+.showroom .glass {
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.16);
+  color: white;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px);
+  transition: transform 180ms ease, background 180ms ease;
+}
+
+.showroom .menu-btn {
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+}
+
+.showroom .menu-btn:hover,
+.showroom .nav-arrow:hover,
+.showroom .glass:hover,
+.showroom .enter:hover,
+.showroom .context button:hover,
+.showroom .context a:hover,
+.showroom .chip:hover {
+  transform: translateY(-1px);
+}
+
+.showroom .rail {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(18, 17, 15, 0.58);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(16px);
+}
+
+.showroom .context button,
+.showroom .context a {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  padding: 0.7rem 1.15rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  transition: transform 180ms ease;
+}
+
+.showroom .enter {
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
+  transition: transform 200ms ease;
+}
+
+.showroom .legend {
+  position: absolute;
+  left: 1rem;
+  bottom: 5.75rem;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  max-width: min(28rem, calc(100% - 6rem));
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(18, 17, 15, 0.5);
+  padding: 0.5rem 0.9rem;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(14px);
+}
+
+.showroom .legend i {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.35rem;
+  border-radius: 99px;
+  vertical-align: -1px;
+}
+
+.showroom .sheet {
+  animation: sheet-in 320ms ease;
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(18px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.showroom .unit-card,
+.showroom .drawer {
+  background: linear-gradient(180deg, #fff 0%, var(--paper) 28%);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.showroom .unit-card .handle,
+.showroom .drawer .handle {
+  display: none;
+  width: 42px;
+  height: 4px;
+  margin: 0 auto 10px;
+  border-radius: 99px;
+  background: #d9cbb8;
+}
+
+@media (max-width: 767px) {
+  .showroom .unit-card .handle,
+  .showroom .drawer .handle {
+    display: block;
+  }
+}
+
+.showroom .chip {
+  border: 1px solid #e4d9c8;
+  border-radius: 999px;
+  background: white;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.82rem;
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.showroom .chip-solid {
+  border-color: transparent;
+  background: var(--ink);
+  color: white;
+}
+
+.showroom .chip-wa {
+  border-color: transparent;
+  background: #1f8a5b;
+  color: white;
+}
+
+.showroom .chip-accent {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--ink);
+}
+
+.showroom .cookie {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  left: 1rem;
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 0.95rem 1.1rem;
+  color: var(--ink);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px);
+}
+
+.showroom .wordmark {
+  letter-spacing: -0.03em;
+  text-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+}
+
+.showroom .eyebrow {
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+}
+
+.showroom .quote-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+
+.showroom .quote-grid div {
+  border-radius: 1rem;
+  background: white;
+  padding: 0.65rem 0.75rem;
+  box-shadow: 0 1px 0 rgba(28, 25, 21, 0.04);
+}
+
+.showroom .field {
+  width: 100%;
+  border: 1px solid #e4d9c8;
+  border-radius: 0.9rem;
+  background: white;
+  padding: 0.55rem 0.75rem;
+}
