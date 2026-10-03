@@ -45,6 +45,7 @@ export const STATUS_LABEL: Record<string, string> = {
   reservada: "Reservada",
   vendida: "Vendida",
   bloqueada: "Bloqueada",
+  pausa: "En pausa",
   oculta: "Oculta",
   consultar: "Consultar disponibilidad",
 };
@@ -85,6 +86,7 @@ export const STATUS_COLOR: Record<string, string> = {
   reservada: "#c49214",
   vendida: "#b42318",
   bloqueada: "#667085",
+  pausa: "#5b6b7a",
   oculta: "#98a2b3",
   consultar: "#b45309",
 };

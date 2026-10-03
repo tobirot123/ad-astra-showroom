@@ -168,6 +168,10 @@ const tables: [string, object[]][] = [
   ["change_log", db.change_log],
   ["events", db.events],
   ["integrations", db.integrations],
+  ["viewpoints", db.viewpoints],
+  ["tours", db.tours],
+  ["points_of_interest", db.points_of_interest],
+  ["galleries", db.galleries],
 ];
 
 for (const [table, rows] of tables) chunks.push(insert(table, rows));

@@ -27,6 +27,7 @@ const LATER_TABLES = [
   "brokers",
   "broker_projects",
   "quotations",
+  "viewpoints",
 ] as const;
 
 function read(): DemoFile {

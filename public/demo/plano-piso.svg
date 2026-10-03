@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800">
+  <rect width="1200" height="800" fill="#f7f3ec"/>
+  <rect x="40" y="80" width="1120" height="640" fill="none" stroke="#1c1915" stroke-width="8"/>
+  <path d="M330 80 V720 M600 80 V720 M870 80 V720" stroke="#1c1915" stroke-width="6"/>
+  <path d="M70 400 H310 M360 400 H570 M630 400 H840 M900 400 H1130" stroke="#c4b7a4" stroke-width="3"/>
+  <text x="180" y="160" font-family="Georgia, serif" font-size="28" fill="#6b6258">A</text>
+  <text x="450" y="160" font-family="Georgia, serif" font-size="28" fill="#6b6258">B</text>
+  <text x="720" y="160" font-family="Georgia, serif" font-size="28" fill="#6b6258">C</text>
+  <text x="990" y="160" font-family="Georgia, serif" font-size="28" fill="#6b6258">D</text>
+</svg>

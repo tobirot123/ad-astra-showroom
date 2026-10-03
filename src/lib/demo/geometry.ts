@@ -38,6 +38,66 @@ function round(n: number): number {
   return Math.round(n * 1000) / 1000;
 }
 
+export function rect(x0: number, y0: number, x1: number, y1: number): [number, number][] {
+  return [
+    [round(x0), round(y0)],
+    [round(x1), round(y0)],
+    [round(x1), round(y1)],
+    [round(x0), round(y1)],
+  ];
+}
+
+/** Planta tipo de Torre A: cuatro unidades de izquierda a derecha. */
+export const PLAN_COLUMNS = [
+  { letter: "A", x0: 0.07, x1: 0.27 },
+  { letter: "B", x0: 0.29, x1: 0.49 },
+  { letter: "C", x0: 0.51, x1: 0.71 },
+  { letter: "D", x0: 0.73, x1: 0.93 },
+];
+
+export function planPolygon(letter: string): [number, number][] {
+  const col = PLAN_COLUMNS.find((c) => c.letter === letter);
+  if (!col) throw new Error(`Sin planta para ${letter}`);
+  return rect(col.x0 + 0.015, 0.2, col.x1 - 0.015, 0.8);
+}
+
+export const TORRE_B_COLUMNS = [
+  { letter: "A", x0: 0.2, x1: 0.46 },
+  { letter: "B", x0: 0.54, x1: 0.8 },
+];
+
+export const TORRE_B_FLOORS = [
+  { n: 3, y0: 0.16, y1: 0.34 },
+  { n: 2, y0: 0.4, y1: 0.58 },
+  { n: 1, y0: 0.64, y1: 0.82 },
+];
+
+export function torreBPolygon(floor: number, letter: string): [number, number][] {
+  const col = TORRE_B_COLUMNS.find((c) => c.letter === letter);
+  const band = TORRE_B_FLOORS.find((f) => f.n === floor);
+  if (!col || !band) throw new Error(`Sin geometría B ${floor}${letter}`);
+  return rect(col.x0 + 0.02, band.y0 + 0.02, col.x1 - 0.02, band.y1 - 0.02);
+}
+
+export function torreBPlanPolygon(letter: string): [number, number][] {
+  const col = letter === "A" ? { x0: 0.1, x1: 0.46 } : { x0: 0.54, x1: 0.9 };
+  return rect(col.x0, 0.18, col.x1, 0.82);
+}
+
+export function lotePolygon(index: number): [number, number][] {
+  const col = index % 3;
+  const row = Math.floor(index / 3);
+  const x0 = 0.08 + col * 0.3;
+  const y0 = 0.16 + row * 0.4;
+  return rect(x0, y0, x0 + 0.24, y0 + 0.3);
+}
+
+export const AERIAL_HOTSPOTS = {
+  torreA: rect(0.16, 0.2, 0.4, 0.52),
+  torreB: rect(0.5, 0.18, 0.74, 0.5),
+  loteo: rect(0.18, 0.6, 0.78, 0.88),
+};
+
 export function facadeSvg(): string {
   const { width: w, height: h } = FACADE;
   const windows = FLOOR_BANDS.flatMap((band) =>

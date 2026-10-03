@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1100">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d5e2ea"/>
+      <stop offset="1" stop-color="#f4efe6"/>
+    </linearGradient>
+    <linearGradient id="stone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f1e7"/>
+      <stop offset="1" stop-color="#e4d8c8"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="1100" fill="url(#sky)"/>
+  <rect y="980" width="800" height="120" fill="#d7cfc3"/>
+  <rect x="120" y="140" width="560" height="820" fill="url(#stone)" stroke="#c3b29a"/>
+  <rect x="200" y="70" width="400" height="80" fill="#1f1a17"/>
+  <text x="400" y="122" text-anchor="middle" fill="#f4efe6" font-family="Georgia, serif" font-size="28" letter-spacing="6">TORRE B</text>
+  <g fill="#9eb6c6" stroke="#8d7358" stroke-width="3">
+    <rect x="176" y="198" width="176" height="132"/>
+    <rect x="448" y="198" width="176" height="132"/>
+    <rect x="176" y="462" width="176" height="132"/>
+    <rect x="448" y="462" width="176" height="132"/>
+    <rect x="176" y="726" width="176" height="132"/>
+    <rect x="448" y="726" width="176" height="132"/>
+  </g>
+</svg>

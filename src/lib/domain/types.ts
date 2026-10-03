@@ -5,6 +5,7 @@ export type UnitStatus =
   | "reservada"
   | "vendida"
   | "bloqueada"
+  | "pausa"
   | "oculta";
 
 export type RequestTipo = "reserve" | "sell" | "release";
@@ -91,6 +92,8 @@ export interface ProjectSettings {
   lead_required_for_request: boolean;
   escalate_to_superadmin: boolean;
   approver_user_ids: string[];
+  /** Sin videos: solo las imágenes de cada escena. */
+  showroom_lite?: boolean;
 }
 
 export interface ProjectContact {
@@ -370,7 +373,7 @@ export interface Quotation {
 export interface Overlay {
   id: string;
   project_id: string;
-  contenedor: "facade" | "floor" | "masterplan" | "media";
+  contenedor: "facade" | "floor" | "masterplan" | "media" | "scene";
   contenedor_id: string | null;
   forma: "rect" | "polygon" | "hotspot";
   puntos: [number, number][];
@@ -379,6 +382,17 @@ export interface Overlay {
   etiqueta: string;
   estado: "draft" | "published";
   orden: number;
+}
+
+export interface Viewpoint {
+  id: string;
+  project_id: string;
+  building_id: string | null;
+  nombre: string;
+  tipo: "portada" | "exterior" | "aereo" | "barrio" | "masterplan";
+  orden: number;
+  imagen_url: string;
+  video_url: string | null;
 }
 
 export interface Lead {
@@ -587,6 +601,7 @@ export interface Database {
   brokers: Broker[];
   broker_projects: BrokerProject[];
   quotations: Quotation[];
+  viewpoints: Viewpoint[];
   overlays: Overlay[];
   leads: Lead[];
   lead_activities: LeadActivity[];

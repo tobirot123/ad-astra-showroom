@@ -30,3 +30,12 @@ textarea {
 ::selection {
   background: #e7d3bf;
 }
+
+@keyframes stage-fade {
+  from { opacity: 0.45; }
+  to { opacity: 1; }
+}
+
+.stage-fade {
+  animation: stage-fade 420ms ease;
+}

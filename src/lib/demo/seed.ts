@@ -1,3 +1,4 @@
+import { appendShowcase } from "@/lib/demo/seed-m2";
 import { COLUMNS, FLOOR_BANDS, unitPolygon } from "@/lib/demo/geometry";
 import { seedId } from "@/lib/domain/ids";
 import type {
@@ -116,7 +117,7 @@ export function buildSeed(now = new Date()): Database {
         id: seedId(200 + (band.n - 1) * 4 + colIndex),
         project_id: PROJECT,
         contenedor: "facade",
-        contenedor_id: null,
+        contenedor_id: BUILDING,
         forma: "polygon",
         puntos: unitPolygon(band.n, col.letter),
         vinculo_tipo: "unit",
@@ -360,6 +361,7 @@ export function buildSeed(now = new Date()): Database {
     brokers: [],
     broker_projects: [],
     quotations: [],
+    viewpoints: [],
     media_links: [
       { id: seedId(410), media_id: seedId(400), entidad: "project", entidad_id: PROJECT, rol: "fachada", orden: 0 },
       { id: seedId(411), media_id: seedId(401), entidad: "typology", entidad_id: TYP_2, rol: "plano", orden: 0 },
@@ -419,6 +421,7 @@ export function buildSeed(now = new Date()): Database {
     integration_deliveries: [],
   };
 
+  appendShowcase(db, iso);
   return db;
 }
 

@@ -20,8 +20,14 @@ import {
   markRead,
   rejectRequest,
   revertInherit,
+  deletePoi,
+  deleteTour,
+  deleteViewpoint,
   saveIntegration,
   saveOverlays,
+  savePoi,
+  saveTour,
+  saveViewpoint,
   sweep,
   undoChange,
   updateLead,
@@ -30,7 +36,7 @@ import {
   type OpResult,
 } from "@/lib/services/engine";
 import { buildBootstrap } from "@/lib/services/present";
-import { ServiceError, type Actor, type Database, type FieldType, type Role, type UnitStatus } from "@/lib/domain/types";
+import { ServiceError, type Actor, type Database, type FieldType, type Overlay, type Role, type UnitStatus } from "@/lib/domain/types";
 import type { InheritedField } from "@/lib/domain/units";
 
 export const dynamic = "force-dynamic";
@@ -112,7 +118,22 @@ function run(db: Database, actor: Actor, op: string, body: Record<string, unknow
     case "create_characteristic":
       return createCharacteristic(db, actor, projectId, String(body.nombre ?? ""));
     case "save_overlays":
-      return saveOverlays(db, actor, projectId, (body.overlays ?? []) as never, now);
+      return saveOverlays(db, actor, projectId, (body.overlays ?? []) as never, now, {
+        contenedor: (String(body.contenedor ?? "facade") as Overlay["contenedor"]),
+        contenedorId: body.contenedorId ? String(body.contenedorId) : null,
+      });
+    case "save_viewpoint":
+      return saveViewpoint(db, actor, projectId, (body.viewpoint ?? {}) as never);
+    case "delete_viewpoint":
+      return deleteViewpoint(db, actor, String(body.viewpointId));
+    case "save_poi":
+      return savePoi(db, actor, projectId, (body.poi ?? {}) as never);
+    case "delete_poi":
+      return deletePoi(db, actor, String(body.poiId));
+    case "save_tour":
+      return saveTour(db, actor, projectId, (body.tour ?? {}) as never);
+    case "delete_tour":
+      return deleteTour(db, actor, String(body.tourId));
     case "update_lead":
       return updateLead(db, actor, String(body.leadId), (body.patch ?? {}) as never, now);
     case "create_request":
