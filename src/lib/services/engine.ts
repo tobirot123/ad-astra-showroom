@@ -25,8 +25,12 @@ import type {
   FieldType,
   Lead,
   NotificationRow,
+  Overlay,
+  PointOfInterest,
   Project,
   RequestTipo,
+  Tour,
+  Viewpoint,
   Role,
   Unit,
   UnitStatus,
@@ -89,6 +93,12 @@ function requireProject(db: Database, actor: Actor, projectId: string): Project 
   if (!project) throw new ServiceError("No encontramos el proyecto.", 404);
   if (!canAccessProject(actor, project)) throw new ServiceError("No tenés acceso a esta organización.", 403);
   return project;
+}
+
+function optionalNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function requireAction(actor: Actor, action: Parameters<typeof can>[1]) {
@@ -1209,22 +1219,35 @@ export function saveOverlays(
   projectId: string,
   overlays: Database["overlays"],
   now: Date,
+  scope?: { contenedor: Overlay["contenedor"]; contenedorId: string | null },
 ): OpResult {
   const project = requireProject(db, actor, projectId);
   requireAction(actor, "edit_overlays");
-  const previous = db.overlays.filter((o) => o.project_id === projectId && o.contenedor === "facade");
+  const contenedor = scope?.contenedor ?? overlays[0]?.contenedor ?? "facade";
+  const contenedorId = scope ? scope.contenedorId : (overlays[0]?.contenedor_id ?? null);
+  const previous = db.overlays.filter(
+    (overlay) => overlay.project_id === projectId && overlay.contenedor === contenedor && (overlay.contenedor_id ?? null) === (contenedorId ?? null),
+  );
   for (const overlay of overlays) {
-    if (overlay.puntos.some((p) => p[0] < 0 || p[0] > 1 || p[1] < 0 || p[1] > 1)) {
+    if (overlay.puntos.some((point) => point[0] < 0 || point[0] > 1 || point[1] < 0 || point[1] > 1)) {
       throw new ServiceError("Las zonas tienen que quedar dentro de la imagen.");
     }
   }
-  db.overlays = db.overlays.filter((o) => !(o.project_id === projectId && o.contenedor === "facade"));
+  db.overlays = db.overlays.filter(
+    (overlay) => !(overlay.project_id === projectId && overlay.contenedor === contenedor && (overlay.contenedor_id ?? null) === (contenedorId ?? null)),
+  );
   for (const overlay of overlays) {
-    db.overlays.push({ ...overlay, project_id: projectId, contenedor: "facade", estado: "published" });
+    db.overlays.push({
+      ...overlay,
+      project_id: projectId,
+      contenedor,
+      contenedor_id: contenedorId,
+      estado: "published",
+    });
   }
   logChange(db, {
     project_id: project.id, change_set_id: null, user_id: actor.id, requested_by: null, request_id: null,
-    entidad: "overlay", entidad_id: project.id, campo: "fachada", valor_anterior: previous, valor_nuevo: overlays, origen: "edit",
+    entidad: "overlay", entidad_id: project.id, campo: `${contenedor}:${contenedorId ?? ""}`, valor_anterior: previous, valor_nuevo: overlays, origen: "edit",
   }, now);
   return noResult();
 }
@@ -1269,7 +1292,7 @@ export function updateProject(
   db: Database,
   actor: Actor,
   projectId: string,
-  patch: Partial<Pick<Project, "nombre" | "descripcion" | "direccion" | "contacto" | "fecha_entrega">> & { settings?: Partial<Project["settings"]> },
+  patch: Partial<Pick<Project, "nombre" | "descripcion" | "direccion" | "contacto" | "fecha_entrega" | "estado" | "lat" | "lng" | "redes">> & { settings?: Partial<Project["settings"]> },
 ): OpResult {
   const project = requireProject(db, actor, projectId);
   requireAction(actor, "edit_project");
@@ -1277,6 +1300,14 @@ export function updateProject(
   if (patch.descripcion != null) project.descripcion = patch.descripcion;
   if (patch.direccion != null) project.direccion = patch.direccion;
   if (patch.fecha_entrega !== undefined) project.fecha_entrega = patch.fecha_entrega;
+  if (patch.estado) {
+    if (!["draft", "published", "coming_soon"].includes(patch.estado)) throw new ServiceError("Estado de proyecto inválido.");
+    requireAction(actor, "publish");
+    project.estado = patch.estado;
+  }
+  if (patch.lat !== undefined) project.lat = patch.lat;
+  if (patch.lng !== undefined) project.lng = patch.lng;
+  if (patch.redes) project.redes = { ...(project.redes ?? {}), ...patch.redes };
   if (patch.contacto) project.contacto = { ...project.contacto, ...patch.contacto };
   if (patch.settings) {
     if (patch.settings.request_expiry_hours != null) {
@@ -1286,6 +1317,133 @@ export function updateProject(
     project.settings = { ...project.settings, ...patch.settings };
   }
   project.updated_at = new Date().toISOString();
+  return noResult();
+}
+
+export function saveViewpoint(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  input: Partial<Viewpoint> & Pick<Viewpoint, "nombre" | "tipo" | "imagen_url">,
+): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "manage_media");
+  const existing = input.id ? db.viewpoints.find((scene) => scene.id === input.id && scene.project_id === project.id) : undefined;
+  if (existing) {
+    existing.nombre = input.nombre.trim();
+    existing.tipo = input.tipo;
+    existing.imagen_url = input.imagen_url.trim();
+    existing.video_url = input.video_url?.trim() || null;
+    existing.building_id = input.building_id ?? null;
+    existing.orden = Number(input.orden ?? existing.orden);
+  } else {
+    db.viewpoints.push({
+      id: uid(),
+      project_id: project.id,
+      building_id: input.building_id ?? null,
+      nombre: input.nombre.trim(),
+      tipo: input.tipo,
+      orden: Number(input.orden ?? db.viewpoints.filter((scene) => scene.project_id === project.id).length),
+      imagen_url: input.imagen_url.trim(),
+      video_url: input.video_url?.trim() || null,
+    });
+  }
+  return noResult();
+}
+
+export function deleteViewpoint(db: Database, actor: Actor, viewpointId: string): OpResult {
+  const scene = db.viewpoints.find((item) => item.id === viewpointId);
+  if (!scene) throw new ServiceError("No encontramos la escena.", 404);
+  requireProject(db, actor, scene.project_id);
+  requireAction(actor, "manage_media");
+  db.viewpoints = db.viewpoints.filter((item) => item.id !== viewpointId);
+  db.overlays = db.overlays.filter((overlay) => !(overlay.contenedor === "scene" && overlay.contenedor_id === viewpointId));
+  return noResult();
+}
+
+export function savePoi(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  input: Partial<PointOfInterest> & Pick<PointOfInterest, "nombre">,
+): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "edit_project");
+  const existing = input.id ? db.points_of_interest.find((poi) => poi.id === input.id && poi.project_id === project.id) : undefined;
+  const lat = optionalNumber(input.lat);
+  const lng = optionalNumber(input.lng);
+  const distancia = optionalNumber(input.distancia_m);
+  if (existing) {
+    existing.nombre = input.nombre.trim();
+    existing.categoria = input.categoria?.trim() || "otro";
+    existing.lat = lat;
+    existing.lng = lng;
+    existing.distancia_m = distancia;
+    existing.descripcion = input.descripcion ?? "";
+    existing.orden = Number(input.orden ?? existing.orden);
+  } else {
+    db.points_of_interest.push({
+      id: uid(),
+      project_id: project.id,
+      nombre: input.nombre.trim(),
+      categoria: input.categoria?.trim() || "otro",
+      lat,
+      lng,
+      distancia_m: distancia,
+      descripcion: input.descripcion ?? "",
+      orden: Number(input.orden ?? db.points_of_interest.filter((poi) => poi.project_id === project.id).length + 1),
+    });
+  }
+  return noResult();
+}
+
+export function deletePoi(db: Database, actor: Actor, poiId: string): OpResult {
+  const poi = db.points_of_interest.find((item) => item.id === poiId);
+  if (!poi) throw new ServiceError("No encontramos el lugar.", 404);
+  requireProject(db, actor, poi.project_id);
+  requireAction(actor, "edit_project");
+  db.points_of_interest = db.points_of_interest.filter((item) => item.id !== poiId);
+  return noResult();
+}
+
+export function saveTour(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  input: Partial<Tour> & Pick<Tour, "url" | "titulo" | "proveedor" | "entidad" | "entidad_id">,
+): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "manage_media");
+  if (!input.url.trim()) throw new ServiceError("Pegá la URL del tour.");
+  const existing = input.id ? db.tours.find((tour) => tour.id === input.id && tour.project_id === project.id) : undefined;
+  if (existing) {
+    existing.titulo = input.titulo.trim() || "Tour 360";
+    existing.url = input.url.trim();
+    existing.proveedor = input.proveedor;
+    existing.entidad = input.entidad;
+    existing.entidad_id = input.entidad_id;
+    existing.orden = Number(input.orden ?? existing.orden);
+  } else {
+    db.tours.push({
+      id: uid(),
+      project_id: project.id,
+      entidad: input.entidad,
+      entidad_id: input.entidad_id,
+      proveedor: input.proveedor,
+      url: input.url.trim(),
+      titulo: input.titulo.trim() || "Tour 360",
+      orden: Number(input.orden ?? db.tours.filter((tour) => tour.project_id === project.id).length + 1),
+    });
+  }
+  return noResult();
+}
+
+export function deleteTour(db: Database, actor: Actor, tourId: string): OpResult {
+  const tour = db.tours.find((item) => item.id === tourId);
+  if (!tour) throw new ServiceError("No encontramos el tour.", 404);
+  requireProject(db, actor, tour.project_id);
+  requireAction(actor, "manage_media");
+  db.tours = db.tours.filter((item) => item.id !== tourId);
   return noResult();
 }
 

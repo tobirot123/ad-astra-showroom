@@ -30,6 +30,13 @@ export function ProjectScreen() {
         descripcion: String(form.get("descripcion") ?? ""),
         direccion: String(form.get("direccion") ?? ""),
         fecha_entrega: String(form.get("fecha_entrega") ?? "") || null,
+        estado: String(form.get("estado") ?? project.estado) as "draft" | "published" | "coming_soon",
+        lat: String(form.get("lat") ?? "") === "" ? null : Number(form.get("lat")),
+        lng: String(form.get("lng") ?? "") === "" ? null : Number(form.get("lng")),
+        redes: {
+          instagram: String(form.get("instagram") ?? ""),
+          facebook: String(form.get("facebook") ?? ""),
+        },
         contacto: {
           whatsapp: String(form.get("whatsapp") ?? ""),
           email: String(form.get("email") ?? ""),
@@ -40,6 +47,7 @@ export function ProjectScreen() {
           public_pending_display: String(form.get("pending") ?? "available"),
           lead_required_for_request: form.get("lead_required") === "on",
           escalate_to_superadmin: form.get("escalate") === "on",
+          showroom_lite: form.get("lite") === "on",
         },
       },
     });
@@ -50,7 +58,7 @@ export function ProjectScreen() {
       <div>
         <h1 className="font-serif text-4xl">Proyecto</h1>
         <p className="mt-1 text-sm text-[#6b6258]">
-          {project.nombre} · /s/{project.slug} · {project.estado === "published" ? "publicado" : "borrador"}
+          {project.nombre} · /s/{project.slug} · {project.estado === "published" ? "publicado" : project.estado === "coming_soon" ? "próximamente" : "borrador"}
         </p>
         <form
           className="mt-5 space-y-3 rounded-3xl border border-[#e4d9c8] bg-white p-5"
@@ -75,6 +83,30 @@ export function ProjectScreen() {
             Entrega
             <input name="fecha_entrega" defaultValue={project.fecha_entrega ?? ""} disabled={!admin} className="mt-1 w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
           </label>
+          <label className="block text-sm">
+            Publicación
+            <select name="estado" defaultValue={project.estado} disabled={!admin} className="mt-1 w-full rounded-xl border border-[#e4d9c8] px-3 py-2">
+              <option value="draft">Borrador</option>
+              <option value="published">Publicado</option>
+              <option value="coming_soon">Próximamente</option>
+            </select>
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm">Latitud
+              <input name="lat" defaultValue={project.lat ?? ""} disabled={!admin} className="mt-1 w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
+            </label>
+            <label className="text-sm">Longitud
+              <input name="lng" defaultValue={project.lng ?? ""} disabled={!admin} className="mt-1 w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
+            </label>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm">Instagram
+              <input name="instagram" defaultValue={project.redes?.instagram ?? ""} disabled={!admin} className="mt-1 w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
+            </label>
+            <label className="text-sm">Facebook
+              <input name="facebook" defaultValue={project.redes?.facebook ?? ""} disabled={!admin} className="mt-1 w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
+            </label>
+          </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="text-sm">
               WhatsApp
@@ -109,6 +141,10 @@ export function ProjectScreen() {
           <label className="flex items-center gap-2 text-sm">
             <input name="escalate" type="checkbox" defaultChecked={project.settings.escalate_to_superadmin} disabled={!admin} />
             Avisar también a Ad Astra si nadie responde
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input name="lite" type="checkbox" defaultChecked={Boolean(project.settings.showroom_lite)} disabled={!admin} />
+            Showroom solo con imágenes, sin videos
           </label>
           {admin && <button className="rounded-full bg-[#1c1915] px-4 py-2 text-sm text-white">Guardar proyecto</button>}
         </form>

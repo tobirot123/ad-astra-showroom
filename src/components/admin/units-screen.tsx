@@ -159,7 +159,7 @@ export function UnitsScreen() {
                       className="rounded border border-transparent bg-transparent"
                       onChange={(e) => void mutate({ op: "direct_status", unitId: unit.id, estado: e.target.value })}
                     >
-                      {["disponible", "reservada", "vendida", "bloqueada", "oculta"].map((key) => <option key={key} value={key}>{STATUS_LABEL[key]}</option>)}
+                      {["disponible", "reservada", "vendida", "bloqueada", "pausa", "oculta"].map((key) => <option key={key} value={key}>{STATUS_LABEL[key]}</option>)}
                     </select>
                   ) : STATUS_LABEL[unit.estado]}
                 </td>

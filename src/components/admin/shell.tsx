@@ -13,6 +13,8 @@ const LINKS = [
   { href: "/admin/campos", label: "Campos", action: "edit_custom_fields" as const },
   { href: "/admin/medios", label: "Medios", action: "manage_media" as const },
   { href: "/admin/zonas", label: "Zonas", action: "edit_overlays" as const },
+  { href: "/admin/recorrido", label: "Recorrido", action: "manage_media" as const },
+  { href: "/admin/lugares", label: "Lugares", action: "edit_project" as const },
   { href: "/admin/solicitudes", label: "Solicitudes", action: "request_status" as const },
   { href: "/admin/leads", label: "Leads", action: "view_leads" as const },
   { href: "/admin/historial", label: "Historial", action: "view_audit" as const },

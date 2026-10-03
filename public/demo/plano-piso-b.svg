@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800">
+  <rect width="1200" height="800" fill="#f7f3ec"/>
+  <rect x="70" y="90" width="1060" height="620" fill="none" stroke="#1c1915" stroke-width="8"/>
+  <path d="M600 90 V710" stroke="#1c1915" stroke-width="6"/>
+  <text x="300" y="180" text-anchor="middle" font-family="Georgia, serif" font-size="32" fill="#6b6258">A</text>
+  <text x="900" y="180" text-anchor="middle" font-family="Georgia, serif" font-size="32" fill="#6b6258">B</text>
+</svg>
