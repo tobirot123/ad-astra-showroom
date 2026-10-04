@@ -1,3 +1,7 @@
+import type { FacadeMask } from "@/lib/domain/facade-mask";
+
+export type { FacadeMask } from "@/lib/domain/facade-mask";
+
 export type Role = "superadmin" | "org_admin" | "seller" | "viewer";
 
 export type UnitStatus =
@@ -121,6 +125,11 @@ export interface ProjectSettings {
   };
   /** Foto de vista por orientación. Una cadena vacía oculta el default. */
   vistas_orientacion?: Record<string, string>;
+  /**
+   * Máscara del estudio por parada. Si hay una imagen, el showroom la usa
+   * en lugar de los polígonos de esa escena.
+   */
+  mascaras?: FacadeMask[];
 }
 
 export interface ProjectContact {

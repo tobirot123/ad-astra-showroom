@@ -26,6 +26,7 @@ import type {
   Lead,
   NotificationRow,
   Overlay,
+  FacadeMask,
   PointOfInterest,
   Project,
   RequestTipo,
@@ -1248,6 +1249,37 @@ export function saveOverlays(
   logChange(db, {
     project_id: project.id, change_set_id: null, user_id: actor.id, requested_by: null, request_id: null,
     entidad: "overlay", entidad_id: project.id, campo: `${contenedor}:${contenedorId ?? ""}`, valor_anterior: previous, valor_nuevo: overlays, origen: "edit",
+  }, now);
+  return noResult();
+}
+
+export function saveFacadeMask(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  viewpointId: string,
+  mask: FacadeMask | null,
+  now: Date,
+): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "edit_overlays");
+  const scene = db.viewpoints.find((item) => item.id === viewpointId && item.project_id === projectId);
+  if (!scene) throw new ServiceError("No encontramos esa parada.", 404);
+  if (mask) {
+    const ids = new Set(db.units.filter((unit) => unit.project_id === projectId).map((unit) => unit.id));
+    const linked = [...mask.mapa.map((entry) => entry.unidad_id), ...mask.alphas.map((entry) => entry.unidad_id)].filter(Boolean);
+    if (linked.some((id) => !ids.has(id))) throw new ServiceError("La máscara apunta a una unidad que no es de este proyecto.");
+    if (mask.modo === "idcolor" && !mask.imagen_url) throw new ServiceError("Falta la imagen del pase de color.");
+    if (mask.modo === "alpha" && mask.alphas.length === 0) throw new ServiceError("Subí al menos un PNG de unidad.");
+  }
+  const previous = project.settings.mascaras ?? [];
+  const next = previous.filter((item) => item.viewpoint_id !== viewpointId);
+  if (mask) next.push({ ...mask, viewpoint_id: viewpointId, mapa: mask.mapa.filter((entry) => entry.color), alphas: mask.alphas.filter((entry) => entry.imagen_url) });
+  project.settings = { ...project.settings, mascaras: next };
+  project.updated_at = now.toISOString();
+  logChange(db, {
+    project_id: project.id, change_set_id: null, user_id: actor.id, requested_by: null, request_id: null,
+    entidad: "project", entidad_id: project.id, campo: `mascara:${viewpointId}`, valor_anterior: previous, valor_nuevo: next, origen: "edit",
   }, now);
   return noResult();
 }

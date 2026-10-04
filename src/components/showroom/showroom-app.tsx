@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PoiMap } from "@/components/maps/poi-map";
+import { FacadeVeil } from "@/components/showroom/facade-veil";
+import { maskReady } from "@/lib/domain/facade-mask";
 import { showQuote } from "@/lib/domain/finance";
 import { STATUS_COLOR, STATUS_LABEL, formatM2, formatNumber, formatUsd } from "@/lib/domain/format";
 import { travelMinutes } from "@/lib/domain/geo";
@@ -308,7 +310,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     if (scene.tipo === "masterplan") {
       return data.overlays.filter((overlay) => overlay.contenedor === "masterplan" && overlay.contenedor_id === scene.building_id);
     }
-    if (scene.tipo === "exterior") return scene.hotspots;
+    if (scene.tipo === "exterior") return maskReady(scene.mascara) ? [] : scene.hotspots;
     return [];
   }
 
@@ -597,6 +599,26 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           event.preventDefault();
           setZoom((value) => Math.min(4, Math.max(1, value + (event.deltaY < 0 ? 0.2 : -0.2))));
         }}
+        veil={phase === "escena" && !bridge && !playing && scene && maskReady(scene.mascara) ? (
+          <FacadeVeil
+            mask={scene.mascara}
+            units={data.units}
+            matched={(unitId) => matched(unitId)}
+            hoverId={hoverId}
+            onHover={(unitId, point) => {
+              setHoverId(unitId);
+              setTip(unitId && point ? { id: unitId, x: point.x, y: point.y } : null);
+            }}
+            onPick={(unitId) => {
+              if (moved.current) return;
+              const unit = data.units.find((item) => item.id === unitId);
+              if (!unit) return;
+              setTip(null);
+              setHoverId(null);
+              revealUnit(unit);
+            }}
+          />
+        ) : null}
       >
         {polygons.map((overlay) => {
           const unit = overlay.vinculo_tipo === "unit" ? data.units.find((item) => item.id === overlay.vinculo_id) : undefined;
@@ -607,7 +629,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           const exterior = phase === "escena" && !aerial;
           const hovered = hoverId === overlay.id;
           const [cx, cy] = centroid(overlay.puntos);
-          const fillOpacity = aerial ? 0.01 : exterior ? (hovered ? 0.62 : on ? 0.3 : 0.07) : on ? (selected ? 0.55 : 0.34) : 0.06;
+          const fillOpacity = aerial ? 0.01 : exterior ? (hovered ? 0.62 : on ? 0.35 : 0.08) : on ? (selected ? 0.55 : 0.34) : 0.06;
           return (
             <g
               key={overlay.id}
@@ -1030,7 +1052,7 @@ function sheetTitle(sheet: Sheet) {
 
 function HoverTip({ tip, overlays, units }: { tip: { id: string; x: number; y: number }; overlays: Overlay[]; units: Unit[] }) {
   const overlay = overlays.find((item) => item.id === tip.id);
-  const unit = units.find((item) => item.id === overlay?.vinculo_id);
+  const unit = units.find((item) => item.id === (overlay?.vinculo_id ?? tip.id));
   if (!unit) return null;
   return (
     <div className="unit-tip" style={{ left: tip.x, top: tip.y }}>
@@ -1049,6 +1071,7 @@ function Stage({
         video,
         poster,
         children,
+  veil,
   stageRef,
   onVideoDone,
   onPointerDown,
@@ -1063,6 +1086,7 @@ function Stage({
   video: string | null;
   poster?: string;
   children?: React.ReactNode;
+  veil?: React.ReactNode;
   stageRef: React.RefObject<HTMLDivElement | null>;
   onVideoDone: () => void;
   onPointerDown: (event: React.PointerEvent) => void;
@@ -1150,6 +1174,7 @@ function Stage({
         <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="hotspots absolute inset-0 h-full w-full">
           {children}
         </svg>
+        {veil}
       </div>
     </div>
   );

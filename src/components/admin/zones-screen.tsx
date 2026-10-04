@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { STATUS_COLOR } from "@/lib/domain/format";
 import { can } from "@/lib/domain/permissions";
 import type { Overlay } from "@/lib/domain/types";
+import { MaskPanel } from "@/components/admin/mask-panel";
 import { useAdmin } from "@/components/admin/provider";
 
 function round(n: number) {
@@ -143,7 +144,7 @@ export function ZonesScreen() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-serif text-4xl">Zonas</h1>
-          <p className="text-sm text-[#6b6258]">Elegí el exterior, la planta o el masterplan. Cada zona puede tener todos los vértices que necesites: arrastralos para calzar balcones y fachada.</p>
+          <p className="text-sm text-[#6b6258]">Elegí el exterior, la planta o el masterplan. Los polígonos se arrastran para calzar la fachada. En cada parada también podés subir la máscara del estudio: un pase de color o un PNG con alpha por unidad.</p>
         </div>
         {admin && (
           <button
@@ -242,6 +243,7 @@ export function ZonesScreen() {
               </div>
             </div>
           )}
+          {surface.contenedor === "scene" && surface.link === "unit" && <MaskPanel viewpointId={surface.contenedorId} units={units} />}
           <ul className="max-h-[520px] space-y-2 overflow-auto">
             {zones.map((overlay) => (
               <li key={overlay.id} className={`flex items-center justify-between rounded-2xl border px-3 py-2 text-sm ${selected === overlay.id ? "border-[#1c1915] bg-white" : "border-[#e4d9c8] bg-white/70"}`}>

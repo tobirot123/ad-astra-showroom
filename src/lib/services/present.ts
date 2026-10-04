@@ -135,6 +135,7 @@ export function buildShowroom(db: Database, slug: string) {
         reversa_url: parada?.reversa_url ?? null,
         vuelo_url: parada?.vuelo_url ?? null,
         hotspots: publishedOverlays.filter((overlay) => overlay.contenedor === "scene" && overlay.contenedor_id === scene.id),
+        mascara: project.settings.mascaras?.find((item) => item.viewpoint_id === scene.id) ?? null,
       };
     });
   if (!scenes.length) {
@@ -151,6 +152,7 @@ export function buildShowroom(db: Database, slug: string) {
       reversa_url: null,
       vuelo_url: null,
       hotspots: [],
+      mascara: null,
     });
   }
 
