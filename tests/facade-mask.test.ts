@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { POL_CARAS } from "@/lib/domain/fachada-grilla";
+import { POL_CARAS, POL_SILUETA, dentroDe, recortarPoligono } from "@/lib/domain/fachada-grilla";
 import { buildSeed } from "@/lib/demo/seed";
 import { colorDistance, mapIdColors, maskReady, quantizeHex, referenceColor } from "@/lib/domain/facade-mask";
 import { readIdPassColors } from "@/lib/media/id-pass";
@@ -8,10 +8,10 @@ import { actorFor, saveFacadeMask } from "@/lib/services/engine";
 import { buildShowroom } from "@/lib/services/present";
 import { ServiceError } from "@/lib/domain/types";
 
-const BOUNDS: Record<string, { x0: number; x1: number; y0: number; y1: number }> = {
-  "360°": { x0: 0.34, x1: 0.63, y0: 0.33, y1: 0.83 },
-  "90°": { x0: 0.36, x1: 0.65, y0: 0.33, y1: 0.76 },
-  "255°": { x0: 0.32, x1: 0.64, y0: 0.33, y1: 0.83 },
+const BOUNDS: Record<string, { x0: number; x1: number; y0: number; y1: number; piso: number }> = {
+  "360°": { x0: 0.35, x1: 0.66, y0: 0.36, y1: 0.79, piso: 0.7 },
+  "90°": { x0: 0.36, x1: 0.67, y0: 0.34, y1: 0.72, piso: 0.64 },
+  "255°": { x0: 0.33, x1: 0.6, y0: 0.35, y1: 0.79, piso: 0.68 },
 };
 
 describe("máscaras de fachada", () => {
@@ -28,7 +28,7 @@ describe("máscaras de fachada", () => {
       expect(scene?.hotspots.length).toBeGreaterThan(0);
       expect(scene?.mascara).toBeNull();
       for (const hotspot of scene?.hotspots ?? []) {
-        expect(hotspot.puntos).toHaveLength(4);
+        expect(hotspot.puntos.length).toBeGreaterThanOrEqual(3);
         for (const [x, y] of hotspot.puntos) {
           expect(x).toBeGreaterThanOrEqual(box.x0);
           expect(x).toBeLessThanOrEqual(box.x1);
@@ -39,8 +39,36 @@ describe("máscaras de fachada", () => {
         expect(hidden[nombre]).not.toContain(unit?.orientacion);
       }
       const lows = (scene?.hotspots ?? []).flatMap((hotspot) => hotspot.puntos.map((point) => point[1]));
-      expect(Math.min(...lows)).toBeGreaterThan(0.28);
-      expect(Math.max(...lows)).toBeGreaterThan(0.7);
+      expect(Math.min(...lows)).toBeGreaterThan(0.34);
+      expect(Math.max(...lows)).toBeGreaterThan(box.piso);
+    }
+  });
+
+  it("recorta lo que se sale de la silueta", () => {
+    const clipped = recortarPoligono(
+      [[0, 0], [1, 0], [1, 1], [0, 1]],
+      [[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8]],
+    );
+    for (const point of clipped) {
+      expect(point[0]).toBeGreaterThanOrEqual(0.2);
+      expect(point[0]).toBeLessThanOrEqual(0.8);
+      expect(point[1]).toBeGreaterThanOrEqual(0.2);
+      expect(point[1]).toBeLessThanOrEqual(0.8);
+    }
+    const data = buildSeed(new Date("2026-10-02T15:00:00.000Z"));
+    const showroom = buildShowroom(data, "pol");
+    for (const [nombre, angulo] of [["360°", "360"], ["90°", "90"], ["255°", "255"]] as const) {
+      const scene = showroom?.scenes.find((item) => item.nombre === nombre);
+      const silueta = scene?.silueta ?? POL_SILUETA[angulo] ?? [];
+      expect(silueta.length).toBeGreaterThanOrEqual(4);
+      for (const hotspot of scene?.hotspots ?? []) {
+        const x = hotspot.puntos.reduce((sum, point) => sum + point[0], 0) / hotspot.puntos.length;
+        const y = hotspot.puntos.reduce((sum, point) => sum + point[1], 0) / hotspot.puntos.length;
+        expect(dentroDe([x, y], silueta)).toBe(true);
+      }
+      const [left, right] = POL_CARAS[angulo] ?? [];
+      expect(left?.esquinas[1]).toEqual(right?.esquinas[0]);
+      expect(left?.esquinas[2]).toEqual(right?.esquinas[3]);
     }
   });
 

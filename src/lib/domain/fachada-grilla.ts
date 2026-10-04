@@ -22,6 +22,8 @@ export interface FachadaCara {
 export interface FachadaGrilla {
   viewpoint_id: string;
   caras: FachadaCara[];
+  /** Contorno de la torre en esa parada. Nada se pinta afuera. */
+  silueta?: Point[];
 }
 
 export const ORIENTACIONES_FACHADA = [
@@ -127,6 +129,78 @@ export function celdasDeGrilla(caras: FachadaCara[], units: UnitLite[]) {
   return caras.flatMap((cara) => celdasDeCara(cara, units).map((cell) => ({ ...cell, caraId: cara.id })));
 }
 
+function area(points: Point[]) {
+  let sum = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const a = points[index]!;
+    const b = points[(index + 1) % points.length]!;
+    sum += a[0] * b[1] - b[0] * a[1];
+  }
+  return sum / 2;
+}
+
+function ccw(points: Point[]) {
+  return area(points) < 0 ? [...points].reverse() : points;
+}
+
+function leftOf(point: Point, a: Point, b: Point) {
+  return (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]) >= -1e-8;
+}
+
+function cross(p: Point, q: Point, a: Point, b: Point): Point {
+  const rx = q[0] - p[0];
+  const ry = q[1] - p[1];
+  const sx = b[0] - a[0];
+  const sy = b[1] - a[1];
+  const den = rx * sy - ry * sx;
+  const t = den === 0 ? 0 : ((a[0] - p[0]) * sy - (a[1] - p[1]) * sx) / den;
+  return [Number((p[0] + rx * t).toFixed(4)), Number((p[1] + ry * t).toFixed(4))];
+}
+
+/** Recorta un polígono contra la silueta convexa de la torre. */
+export function recortarPoligono(subject: Point[], clip: Point[]) {
+  if (clip.length < 3 || subject.length < 3) return subject;
+  let output = subject.map((point) => [point[0], point[1]] as Point);
+  const ring = ccw(clip);
+  for (let index = 0; index < ring.length; index += 1) {
+    const a = ring[index]!;
+    const b = ring[(index + 1) % ring.length]!;
+    const input = output;
+    output = [];
+    if (!input.length) break;
+    let prev = input[input.length - 1]!;
+    for (const current of input) {
+      const currentIn = leftOf(current, a, b);
+      const prevIn = leftOf(prev, a, b);
+      if (currentIn) {
+        if (!prevIn) output.push(cross(prev, current, a, b));
+        output.push(current);
+      } else if (prevIn) output.push(cross(prev, current, a, b));
+      prev = current;
+    }
+  }
+  return output;
+}
+
+export function dentroDe(point: Point, polygon: Point[]) {
+  const ring = ccw(polygon);
+  return ring.every((vertex, index) => leftOf(point, vertex, ring[(index + 1) % ring.length]!));
+}
+
+/** Hexágono exterior de las dos caras que se ven en una parada. */
+export function siluetaDe(caras: FachadaCara[]): Point[] {
+  if (caras.length < 2) return caras[0]?.esquinas ? [...caras[0].esquinas] : [];
+  const [left, right] = caras;
+  return [
+    left!.esquinas[0],
+    left!.esquinas[1],
+    right!.esquinas[1],
+    right!.esquinas[2],
+    left!.esquinas[2],
+    left!.esquinas[3],
+  ];
+}
+
 const PISOS = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0];
 const LOSAS = losasPorAltura();
 
@@ -139,14 +213,14 @@ export const POL_CARAS: Record<string, FachadaCara[]> = {
   "360": [
     {
       id: "360-norte",
-      esquinas: [[0.378, 0.366], [0.502, 0.346], [0.492, 0.77], [0.358, 0.81]],
+      esquinas: [[0.37, 0.402], [0.5, 0.382], [0.494, 0.744], [0.39, 0.766]],
       pisos: PISOS,
       losas: LOSAS,
       orientaciones: ["Norte-Oeste", "Norte"],
     },
     {
       id: "360-este",
-      esquinas: [[0.502, 0.346], [0.608, 0.386], [0.588, 0.73], [0.492, 0.77]],
+      esquinas: [[0.5, 0.382], [0.634, 0.416], [0.62, 0.72], [0.494, 0.744]],
       pisos: PISOS,
       losas: LOSAS,
       orientaciones: ["Norte-Este", "Este"],
@@ -155,14 +229,14 @@ export const POL_CARAS: Record<string, FachadaCara[]> = {
   "90": [
     {
       id: "90-balcones",
-      esquinas: [[0.392, 0.366], [0.502, 0.346], [0.49, 0.705], [0.375, 0.725]],
+      esquinas: [[0.386, 0.402], [0.498, 0.368], [0.49, 0.672], [0.38, 0.692]],
       pisos: PISOS,
       losas: LOSAS,
       orientaciones: ["Norte-Oeste", "Norte", "Norte-Este"],
     },
     {
       id: "90-ranuras",
-      esquinas: [[0.502, 0.346], [0.6, 0.392], [0.585, 0.685], [0.49, 0.705]],
+      esquinas: [[0.498, 0.368], [0.65, 0.414], [0.63, 0.656], [0.49, 0.672]],
       pisos: PISOS,
       losas: LOSAS,
       orientaciones: ["Este", "Sur-Este", "Sur", "Sur-Oeste"],
@@ -171,17 +245,21 @@ export const POL_CARAS: Record<string, FachadaCara[]> = {
   "255": [
     {
       id: "255-norte",
-      esquinas: [[0.348, 0.366], [0.498, 0.346], [0.488, 0.772], [0.332, 0.802]],
+      esquinas: [[0.352, 0.398], [0.494, 0.376], [0.486, 0.74], [0.366, 0.762]],
       pisos: PISOS,
       losas: LOSAS,
       orientaciones: ["Norte-Oeste", "Norte", "Norte-Este"],
     },
     {
       id: "255-este",
-      esquinas: [[0.498, 0.346], [0.608, 0.378], [0.59, 0.732], [0.488, 0.772]],
+      esquinas: [[0.494, 0.376], [0.578, 0.404], [0.552, 0.708], [0.486, 0.74]],
       pisos: PISOS,
       losas: LOSAS,
       orientaciones: ["Este", "Sur-Este", "Sur", "Sur-Oeste"],
     },
   ],
 };
+
+export const POL_SILUETA: Record<string, Point[]> = Object.fromEntries(
+  Object.entries(POL_CARAS).map(([angulo, caras]) => [angulo, siluetaDe(caras)]),
+);

@@ -9,6 +9,7 @@ import { STATUS_COLOR, STATUS_LABEL, formatM2, formatNumber, formatUsd } from "@
 import { travelMinutes } from "@/lib/domain/geo";
 import { poiColor, poiLabel } from "@/lib/domain/poi";
 import "./showroom.css";
+import { coverFrame } from "@/lib/domain/cover-frame";
 import { floorKey, sceneKey, sortUnits, tourEmbed, unitMatches, videosToLoad, type FlowFilters } from "@/lib/domain/showroom-flow";
 import type { ShowroomData } from "@/lib/services/present";
 
@@ -62,22 +63,6 @@ function contain(boxW: number, boxH: number, imgW: number, imgH: number) {
   const width = imgW * scale;
   const height = imgH * scale;
   return { left: (boxW - width) / 2, top: (boxH - height) / 2, width, height };
-}
-
-/** En el celular el ancho de la torre entra entero. En el escritorio la foto llena la pantalla. */
-function coverFrame(boxW: number, boxH: number, imgW: number, imgH: number, focusX: number, focusY: number, shiftX: number) {
-  const portrait = boxH > boxW * 1.15;
-  const span = portrait ? 0.38 : 1;
-  const centerX = portrait ? 0.49 : focusX;
-  const centerY = portrait ? 0.52 : focusY;
-  const scale = portrait ? boxW / (span * imgW) : Math.max(boxW / imgW, boxH / imgH);
-  const width = imgW * scale;
-  const height = imgH * scale;
-  let left = boxW / 2 - centerX * width + shiftX;
-  let top = boxH / 2 - centerY * height;
-  left = Math.min(0, Math.max(boxW - width, left));
-  top = Math.min(0, Math.max(boxH - height, top));
-  return { left, top, width, height };
 }
 
 function centroid(points: [number, number][]) {
@@ -582,6 +567,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         cover={fitCover}
         focus={{ x: 0.49, y: 0.48 }}
         shift={coverShift}
+        clip={phase === "escena" && scene?.tipo === "exterior" ? scene.silueta ?? undefined : undefined}
         zoom={phase === "planta" ? zoom : 1}
         pan={phase === "planta" ? pan : { x: 0, y: 0 }}
         video={bridge ?? (playing && videos.current ? videos.current : null)}
@@ -1141,6 +1127,7 @@ function Stage({
   cover,
   focus = { x: 0.5, y: 0.5 },
   shift = 0,
+  clip,
   zoom,
   pan,
   video,
@@ -1158,6 +1145,7 @@ function Stage({
   cover: boolean;
   focus?: { x: number; y: number };
   shift?: number;
+  clip?: [number, number][];
   zoom: number;
   pan: { x: number; y: number };
   video: string | null;
@@ -1248,10 +1236,15 @@ function Stage({
             onError={onVideoDone}
           />
         )}
-        <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="hotspots absolute inset-0 h-full w-full">
-          {children}
-        </svg>
-        {veil}
+        <div
+          className="absolute inset-0"
+          style={clip && clip.length >= 3 ? { clipPath: `polygon(${clip.map(([x, y]) => `${x * 100}% ${y * 100}%`).join(",")})` } : undefined}
+        >
+          <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="hotspots absolute inset-0 h-full w-full">
+            {children}
+          </svg>
+          {veil}
+        </div>
       </div>
     </div>
   );

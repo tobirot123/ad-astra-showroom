@@ -5,7 +5,7 @@ import { cashPrice, financedQuote, hoursLeftLabel, pendingBadge, publicStatus } 
 import { floorKey } from "@/lib/domain/showroom-flow";
 import { withEffectiveAreas } from "@/lib/domain/units";
 import { encuadreVista, vistaPorOrientacion } from "@/lib/domain/vista";
-import { celdasDeGrilla, plantaDePiso } from "@/lib/domain/fachada-grilla";
+import { celdasDeGrilla, plantaDePiso, recortarPoligono } from "@/lib/domain/fachada-grilla";
 
 function mediaUrl(db: Database, mediaId: string | undefined): string | null {
   if (!mediaId) return null;
@@ -40,15 +40,17 @@ function hotspotsDeFachada(db: Database, project: Project, sceneId: string) {
         orientacion: unit.orientacion,
       };
     });
+  const silueta = grilla.silueta ?? [];
   const cells = celdasDeGrilla(grilla.caras, units);
   const hotspots = cells.flatMap((cell, index) => {
     const unit = units.find((item) => item.codigo === cell.codigo);
-    if (!unit) return [];
+    const puntos = recortarPoligono(cell.puntos, silueta);
+    if (!unit || puntos.length < 3) return [];
     return [{
       id: `fachada-${sceneId}-${cell.codigo}-${index}`,
       contenedor: "scene" as const,
       contenedor_id: sceneId,
-      puntos: cell.puntos,
+      puntos,
       vinculo_tipo: "unit" as const,
       vinculo_id: unit.id,
       etiqueta: cell.codigo,
@@ -170,6 +172,7 @@ export function buildShowroom(db: Database, slug: string) {
         vuelo_url: parada?.vuelo_url ?? null,
         hotspots: hotspotsDeFachada(db, project, scene.id) ?? publishedOverlays.filter((overlay) => overlay.contenedor === "scene" && overlay.contenedor_id === scene.id),
         mascara: project.settings.mascaras?.find((item) => item.viewpoint_id === scene.id) ?? null,
+        silueta: project.settings.fachadas?.find((item) => item.viewpoint_id === scene.id)?.silueta ?? null,
       };
     });
   if (!scenes.length) {
@@ -187,6 +190,7 @@ export function buildShowroom(db: Database, slug: string) {
       vuelo_url: null,
       hotspots: [],
       mascara: null,
+      silueta: null,
     });
   }
 

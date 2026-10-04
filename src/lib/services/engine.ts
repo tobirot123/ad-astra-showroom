@@ -1321,8 +1321,9 @@ export function saveFachadas(
     return { id: String(cara.id || `${viewpointId}-${index}`), esquinas, pisos, orientaciones, ...(losas ? { losas } : {}) };
   });
   const previous = project.settings.fachadas ?? [];
+  const kept = previous.find((item) => item.viewpoint_id === viewpointId);
   const next: FachadaGrilla[] = previous.filter((item) => item.viewpoint_id !== viewpointId);
-  if (clean.length) next.push({ viewpoint_id: viewpointId, caras: clean });
+  if (clean.length) next.push({ viewpoint_id: viewpointId, caras: clean, ...(kept?.silueta ? { silueta: kept.silueta } : {}) });
   project.settings = { ...project.settings, fachadas: next };
   project.updated_at = now.toISOString();
   logChange(db, {
