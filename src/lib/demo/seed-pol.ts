@@ -1,5 +1,6 @@
 import pol from "@/lib/demo/pol-data.json";
 import { exteriorCells } from "@/lib/demo/pol-faces";
+import { distanceMeters } from "@/lib/domain/geo";
 import { seedId } from "@/lib/domain/ids";
 import { VISTA_POR_ORIENTACION } from "@/lib/domain/vista";
 import type { AnalyticsEvent, Database, MediaAsset, MediaLink, Unit } from "@/lib/domain/types";
@@ -399,15 +400,26 @@ export function applyPol(db: Database, now: Date) {
     overlayN += 1;
   }
 
-  db.points_of_interest = pol.pois.map((poi, index) => ({
+  const demoNote = "Dato de demostración. No es información comercial del edificio.";
+  const demoPois: { nombre: string; categoria: string; lat: number; lng: number }[] = [
+    { nombre: "Parque Rodó", categoria: "parque", lat: -34.9128, lng: -56.16515 },
+    { nombre: "Playa Ramírez", categoria: "playa", lat: -34.91638, lng: -56.16974 },
+    { nombre: "FADU, UdelaR", categoria: "educacion", lat: -34.90989, lng: -56.16382 },
+    { nombre: "Escaramuza", categoria: "gastronomia", lat: -34.90654, lng: -56.17112 },
+    { nombre: "Punta Carretas Shopping", categoria: "comercio", lat: -34.92398, lng: -56.15872 },
+    { nombre: "Hospital Pereira Rossell", categoria: "salud", lat: -34.9018, lng: -56.1642 },
+    { nombre: "Parada Bv. España", categoria: "transporte", lat: -34.9089, lng: -56.1692 },
+    { nombre: "Museo Nacional de Artes Visuales", categoria: "cultura", lat: -34.9136, lng: -56.1648 },
+  ];
+  db.points_of_interest = demoPois.map((poi, index) => ({
     id: seedId(4600 + index),
     project_id: PROJECT,
     nombre: poi.nombre,
     categoria: poi.categoria,
     lat: poi.lat,
     lng: poi.lng,
-    distancia_m: poi.distancia_m,
-    descripcion: "",
+    distancia_m: distanceMeters(pol.lat, pol.lng, poi.lat, poi.lng),
+    descripcion: demoNote,
     orden: index + 1,
   }));
 

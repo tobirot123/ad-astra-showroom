@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PoiMap } from "@/components/maps/poi-map";
 import { showQuote } from "@/lib/domain/finance";
 import { STATUS_COLOR, STATUS_LABEL, formatM2, formatNumber, formatUsd } from "@/lib/domain/format";
+import { travelMinutes } from "@/lib/domain/geo";
+import { poiColor, poiLabel } from "@/lib/domain/poi";
 import "./showroom.css";
 import { floorKey, sceneKey, sortUnits, tourEmbed, unitMatches, videosToLoad, type FlowFilters } from "@/lib/domain/showroom-flow";
 import type { ShowroomData } from "@/lib/services/present";
@@ -101,6 +104,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const [photo, setPhoto] = useState(0);
   const [matchCursor, setMatchCursor] = useState(0);
   const [tip, setTip] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
   const swipe = useRef<{ x: number; y: number; lx: number; ly: number } | null>(null);
@@ -308,7 +312,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     return [];
   }
 
-  function onZone(overlay: Overlay, event?: { clientX: number; clientY: number }) {
+  function onZone(overlay: Overlay) {
     if (moved.current || bridge) return;
     if (overlay.vinculo_tipo === "building" && overlay.vinculo_id) {
       goBuilding(overlay.vinculo_id);
@@ -316,12 +320,8 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     }
     const unit = data.units.find((item) => item.id === overlay.vinculo_id);
     if (!unit) return;
-    const coarse = window.matchMedia("(pointer: coarse)").matches;
-    if (phase !== "planta" && coarse && tip?.id !== overlay.id && event) {
-      setTip({ id: overlay.id, x: event.clientX, y: event.clientY });
-      return;
-    }
     setTip(null);
+    setHoverId(null);
     const onPlan = phase === "planta" || scene?.tipo === "masterplan";
     if (onPlan) {
       chooseUnit(unit, phase === "planta" ? "planta" : "masterplan");
@@ -604,21 +604,37 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           const on = matched(unit?.id ?? overlay.vinculo_id);
           const selected = highlightId && (highlightId === unit?.id || highlightId === overlay.vinculo_id);
           const aerial = overlay.vinculo_tipo === "building";
+          const exterior = phase === "escena" && !aerial;
+          const hovered = hoverId === overlay.id;
           const [cx, cy] = centroid(overlay.puntos);
+          const fillOpacity = aerial ? 0.01 : exterior ? (hovered ? 0.62 : on ? 0.3 : 0.07) : on ? (selected ? 0.55 : 0.34) : 0.06;
           return (
             <g
               key={overlay.id}
-              onClick={(event) => { event.stopPropagation(); onZone(overlay, event); }}
-              onMouseEnter={(event) => { if (phase === "escena" && overlay.vinculo_tipo === "unit") setTip({ id: overlay.id, x: event.clientX, y: event.clientY }); }}
-              onMouseLeave={() => setTip((current) => current?.id === overlay.id ? null : current)}
+              onClick={(event) => { event.stopPropagation(); onZone(overlay); }}
+              onMouseEnter={(event) => {
+                if (phase !== "escena" || overlay.vinculo_tipo !== "unit") return;
+                if (window.matchMedia("(pointer: coarse)").matches) return;
+                setHoverId(overlay.id);
+                setTip({ id: overlay.id, x: event.clientX, y: event.clientY });
+              }}
+              onMouseMove={(event) => {
+                if (tip?.id !== overlay.id) return;
+                setTip({ id: overlay.id, x: event.clientX, y: event.clientY });
+              }}
+              onMouseLeave={() => {
+                setHoverId((current) => (current === overlay.id ? null : current));
+                setTip((current) => (current?.id === overlay.id ? null : current));
+              }}
               className="cursor-pointer"
             >
               <polygon
                 points={overlay.puntos.map((point) => point.join(",")).join(" ")}
                 fill={aerial ? "#c4a574" : color}
-                fillOpacity={aerial ? 0.01 : on ? (selected ? 0.55 : 0.38) : 0.05}
-                stroke={aerial ? "transparent" : "#fff"}
-                strokeWidth={selected ? 0.008 : 0.003}
+                fillOpacity={fillOpacity}
+                stroke={exterior ? "transparent" : aerial ? "transparent" : "#fff"}
+                strokeWidth={exterior ? 0 : selected ? 0.008 : 0.003}
+                style={exterior ? { transition: "fill-opacity 180ms ease" } : undefined}
               />
               {aerial && (
                 <>
@@ -733,6 +749,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           {building && building.floors[0] && (
             <button type="button" onClick={goPlans}>Ver plantas</button>
           )}
+          <button type="button" onClick={() => setSheet("mapa")}>Ubicación</button>
           <button type="button" onClick={() => setSheet("galeria")}>Galería</button>
           {data.progress.length > 0 && <button type="button" onClick={() => setSheet("obra")}>Obra</button>}
           {data.project.brochure && <a href={data.project.brochure} target="_blank" rel="noreferrer">Brochure</a>}
@@ -1214,22 +1231,33 @@ function Gallery({ images }: { images: { id: string; nombre: string; url: string
 function MapBlock({ project, pois }: { project: ShowroomData["project"]; pois: ShowroomData["pois"] }) {
   const lat = project.lat;
   const lng = project.lng;
+  const [active, setActive] = useState<string | null>(null);
   if (lat == null || lng == null) return <p className="text-sm text-[#6b6258]">El proyecto todavía no tiene coordenadas.</p>;
-  const bbox = `${lng - 0.02}%2C${lat - 0.015}%2C${lng + 0.02}%2C${lat + 0.015}`;
+  const selected = pois.find((poi) => poi.id === active) ?? null;
   return (
     <div className="space-y-3 text-sm text-[#1c1915]">
-      <iframe title="Mapa" className="h-56 w-full rounded-2xl border-0" src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lng}`} />
-      <div className="flex flex-wrap gap-2">
-        <a className="rounded-full bg-[#1c1915] px-3 py-1 text-white" href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`} target="_blank" rel="noreferrer">En auto</a>
-        <a className="rounded-full border border-[#e4d9c8] px-3 py-1" href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking`} target="_blank" rel="noreferrer">Caminando</a>
-        <a className="rounded-full border border-[#e4d9c8] px-3 py-1" href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=transit`} target="_blank" rel="noreferrer">En transporte</a>
-      </div>
+      <PoiMap lat={lat} lng={lng} nombre={project.nombre} pois={pois} selectedId={active} onSelect={setActive} className="h-64 w-full overflow-hidden rounded-2xl md:h-80" />
+      <p className="text-xs text-[#6b6258]">Los puntos cercanos son de demostración. La línea es un recorrido orientativo, no un camino real.</p>
+      {selected && (
+        <div className="rounded-2xl bg-white p-3">
+          <p className="font-medium">{selected.nombre}</p>
+          <p className="text-[#6b6258]">{poiLabel(selected.categoria)}{selected.distancia_m != null ? ` · ${selected.distancia_m} m` : ""}</p>
+          {selected.distancia_m != null && (
+            <p className="text-[#6b6258]">A pie unos {travelMinutes(selected.distancia_m, 4.5)} min · en auto unos {travelMinutes(selected.distancia_m, 28)} min</p>
+          )}
+          {selected.descripcion && <p className="mt-1">{selected.descripcion}</p>}
+        </div>
+      )}
       <ul className="space-y-2">
         {pois.map((poi) => (
           <li key={poi.id}>
-            <p className="font-medium">{poi.nombre}</p>
-            <p className="text-[#6b6258]">{poi.categoria}{poi.distancia_m != null ? ` · ${poi.distancia_m} m` : ""}</p>
-            <p>{poi.descripcion}</p>
+            <button type="button" className={`flex w-full items-start gap-2 rounded-2xl px-2 py-2 text-left ${active === poi.id ? "bg-white" : ""}`} onClick={() => setActive(poi.id)}>
+              <i className="mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: poiColor(poi.categoria) }} />
+              <span>
+                <span className="block font-medium">{poi.nombre}</span>
+                <span className="text-[#6b6258]">{poiLabel(poi.categoria)}{poi.distancia_m != null ? ` · ${poi.distancia_m} m` : ""}</span>
+              </span>
+            </button>
           </li>
         ))}
       </ul>
@@ -1345,7 +1373,12 @@ function UnitPanel({
 }) {
   const ficha = project.ficha;
   const sinPlano = !unit.plano;
-  const photos = unit.renders.length ? unit.renders : unit.plano ? [unit.plano] : plantaImagen ? [plantaImagen] : [fallback];
+  const photos = [
+    ...(unit.plano ? [unit.plano] : []),
+    ...unit.renders,
+    ...(!unit.plano && plantaImagen ? [plantaImagen] : []),
+  ];
+  if (!photos.length) photos.push(fallback);
   const current = photos[photo] ?? photos[0];
   const [planId, setPlanId] = useState(plans[0]?.id ?? "");
   const [buyer, setBuyer] = useState("");
@@ -1437,7 +1470,8 @@ function UnitPanel({
         </div>
         <p className="font-serif text-3xl">{ficha.precio && unit.mostrar_precio && unit.precio != null ? formatUsd(unit.precio) : "Consultar"}</p>
         <dl className="grid grid-cols-2 gap-2 text-sm">
-          {unit.m2_totales != null && <div><dt className="text-[#6b6258]">Superficie</dt><dd>{formatM2(unit.m2_totales)} m²</dd></div>}
+          {unit.m2_cubiertos != null && <div><dt className="text-[#6b6258]">Cubiertos</dt><dd>{formatM2(unit.m2_cubiertos)} m²</dd></div>}
+          {unit.m2_totales != null && <div><dt className="text-[#6b6258]">Totales</dt><dd>{formatM2(unit.m2_totales)} m²</dd></div>}
           {unit.dormitorios != null && <div><dt className="text-[#6b6258]">Dormitorios</dt><dd>{unit.dormitorios}</dd></div>}
           {unit.banos != null && <div><dt className="text-[#6b6258]">Baños</dt><dd>{unit.banos}</dd></div>}
           {unit.orientacion && <div><dt className="text-[#6b6258]">Orientación</dt><dd>{unit.orientacion}</dd></div>}

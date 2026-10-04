@@ -32,6 +32,26 @@ function plantaKey(level: number) {
   return level === 0 ? "00" : String(level).padStart(2, "0");
 }
 
+/** Ventana más angosta arriba y balcón más ancho abajo, en la perspectiva de la fachada. */
+function facadeMask(quad: Quad, u0: number, u1: number, v0: number, v1: number): [number, number][] {
+  const padU = (u1 - u0) * 0.04;
+  const padV = (v1 - v0) * 0.05;
+  const left = u0 + padU;
+  const right = u1 - padU;
+  const top = v0 + padV;
+  const bottom = v1 - padV;
+  const neck = (right - left) * 0.16;
+  const sill = top + (bottom - top) * 0.46;
+  return [
+    onQuad(quad, left + neck, top),
+    onQuad(quad, right - neck, top),
+    onQuad(quad, right, sill),
+    onQuad(quad, right, bottom),
+    onQuad(quad, left, bottom),
+    onQuad(quad, left, sill),
+  ];
+}
+
 export function exteriorCells(units: { codigo: string; planta: string; tipo: string; orientacion: string | null }[]) {
   const cells: { angulo: string; codigo: string; puntos: [number, number][] }[] = [];
   for (const [angulo, faces] of Object.entries(SPIN_FACES)) {
@@ -46,17 +66,10 @@ export function exteriorCells(units: { codigo: string; planta: string; tipo: str
         rows.forEach((unit, column) => {
           const u0 = column / rows.length;
           const u1 = (column + 1) / rows.length;
-          const padU = (u1 - u0) * 0.08;
-          const padV = (v1 - v0) * 0.1;
           cells.push({
             angulo,
             codigo: unit.codigo,
-            puntos: [
-              onQuad(face.quad, u0 + padU, v0 + padV),
-              onQuad(face.quad, u1 - padU, v0 + padV),
-              onQuad(face.quad, u1 - padU, v1 - padV),
-              onQuad(face.quad, u0 + padU, v1 - padV),
-            ],
+            puntos: facadeMask(face.quad, u0, u1, v0, v1),
           });
         });
       });

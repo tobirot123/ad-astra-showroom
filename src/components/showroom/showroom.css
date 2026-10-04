@@ -239,6 +239,30 @@
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
 }
 
+.poi-pin {
+  display: grid;
+  height: 1.7rem;
+  width: 1.7rem;
+  place-items: center;
+  border: 2px solid white;
+  border-radius: 999px;
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 650;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+}
+
+.poi-pin.is-on {
+  height: 2.1rem;
+  width: 2.1rem;
+}
+
+.poi-pin-home {
+  width: auto;
+  padding: 0 0.45rem;
+  background: #4a6844;
+}
+
 .showroom .unit-tip {
   position: fixed;
   z-index: 40;
