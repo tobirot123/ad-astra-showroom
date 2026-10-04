@@ -11,8 +11,9 @@ import { travelMinutes } from "@/lib/domain/geo";
 import { poiColor, poiLabel } from "@/lib/domain/poi";
 import "./showroom.css";
 import { coverFrame, portraitCenter } from "@/lib/domain/cover-frame";
+import { interiorPoint } from "@/lib/domain/polygon";
 import { AmenityStage, ContactStage, FullIcon, GalleryStage, HoverCard, MapStage, PhMenu, QrIcon, RecorridoStage, UnitSheet, VideoStage } from "@/components/showroom/ph-panels";
-import { floorKey, sceneKey, sortUnits, tourEmbed, unitMatches, videosToLoad, type FlowFilters } from "@/lib/domain/showroom-flow";
+import { firstResidentialFloor, sceneKey, sortUnits, tourEmbed, unitMatches, videosToLoad, type FlowFilters } from "@/lib/domain/showroom-flow";
 import type { ShowroomData } from "@/lib/services/present";
 
 type Unit = ShowroomData["units"][number];
@@ -69,9 +70,7 @@ function contain(boxW: number, boxH: number, imgW: number, imgH: number) {
 }
 
 function centroid(points: [number, number][]) {
-  const x = points.reduce((sum, point) => sum + point[0], 0) / points.length;
-  const y = points.reduce((sum, point) => sum + point[1], 0) / points.length;
-  return [x, y] as const;
+  return interiorPoint(points);
 }
 
 function floorMark(nombre: string, numero: number) {
@@ -88,14 +87,27 @@ function plantaLabel(nombre: string, numero: number) {
   return nombre;
 }
 
-function bandOf(points: [number, number][]): [number, number][] {
+function bandOf(points: [number, number][], thick = false): [number, number][] {
   if (points.length < 4) return points;
   const lerp = (a: [number, number], b: [number, number], t: number): [number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
   const topLeft = points[0]!;
   const topRight = points[1]!;
   const bottomRight = points[2]!;
   const bottomLeft = points[3]!;
-  return [lerp(topLeft, bottomLeft, 0.4), lerp(topRight, bottomRight, 0.4), lerp(topRight, bottomRight, 0.58), lerp(topLeft, bottomLeft, 0.58)];
+  const start = thick ? 0.32 : 0.4;
+  const end = thick ? 0.68 : 0.58;
+  return [lerp(topLeft, bottomLeft, start), lerp(topRight, bottomRight, start), lerp(topRight, bottomRight, end), lerp(topLeft, bottomLeft, end)];
+}
+
+function plateFrame(boxW: number, boxH: number, imgW: number, imgH: number, plate: { x0: number; y0: number; x1: number; y1: number }) {
+  const spanX = Math.max(0.08, plate.x1 - plate.x0);
+  const spanY = Math.max(0.08, plate.y1 - plate.y0);
+  const scale = (boxW * 0.92) / (spanX * imgW);
+  const width = imgW * scale;
+  const height = imgH * scale;
+  const cx = (plate.x0 + plate.x1) / 2;
+  const cy = (plate.y0 + plate.y1) / 2;
+  return { left: boxW / 2 - cx * width, top: boxH / 2 - cy * height, width, height };
 }
 
 function tabReady(unit: Unit, tab: UnitTab, plantaImagen: string | null) {
@@ -141,12 +153,17 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const [floorsOpen, setFloorsOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   const [card, setCard] = useState<{ id: string; x: number; y: number } | null>(null);
-  const [unitTab, setUnitTab] = useState<UnitTab>("planta3d");
+  const [unitTab, setUnitTab] = useState<UnitTab>("galeria");
+  const [narrow, setNarrow] = useState(false);
+  const [lang, setLang] = useState<"es" | "en">("es");
   const [filterPop, setFilterPop] = useState<null | "area" | "estado" | "dorm">(null);
   const [dorm, setDorm] = useState("todos");
   const [area, setArea] = useState<{ min: number; max: number } | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const pinned = useRef(false);
+  const depth = useRef(0);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ dist: number; zoom: number } | null>(null);
   const cardTimer = useRef<number | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
@@ -160,7 +177,10 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const videos = entered && phase === "escena" ? videosToLoad(walk, sceneIndex, lite) : { current: null, next: null };
 
   const areaBound = useMemo(() => {
-    const values = data.units.map((unit) => unit.m2_totales).filter((value): value is number => value != null && value > 0);
+    const values = data.units
+      .filter((unit) => unit.tipo === "departamento" || unit.tipo === "local")
+      .map((unit) => unit.m2_totales)
+      .filter((value): value is number => value != null && value > 0);
     if (!values.length) return { min: 0, max: 100 };
     return { min: Math.min(...values), max: Math.max(...values) };
   }, [data.units]);
@@ -214,11 +234,24 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     const params = new URLSearchParams(window.location.search);
     if (params.get("disp") === "1") setDisp(true);
     if (params.has("escena") || params.has("planta") || params.has("unidad")) {
-      history.replaceState({ showroom: 1 }, "", window.location.href);
+      history.replaceState({ showroom: 1, depth: 0 }, "", window.location.href);
     }
-    const onPop = () => applySearch(window.location.search);
+    const storedLang = localStorage.getItem("adastra-lang");
+    if (storedLang === "en" || storedLang === "es") setLang(storedLang);
+    const narrowQuery = window.matchMedia("(max-width: 767px)");
+    const syncNarrow = () => setNarrow(narrowQuery.matches);
+    syncNarrow();
+    narrowQuery.addEventListener("change", syncNarrow);
+    const onPop = () => {
+      const next = window.history.state?.depth;
+      depth.current = typeof next === "number" ? next : 0;
+      applySearch(window.location.search);
+    };
     window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      narrowQuery.removeEventListener("change", syncNarrow);
+    };
     // La visita se registra una vez por carga.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.project.slug]);
@@ -235,10 +268,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setSheet(null);
-        setUnitId(null);
-      }
+      if (event.key === "Escape") setSheet(null);
       if (sheet || unitId || !entered || phase !== "escena") return;
       if (event.key === "ArrowRight") spin(1);
       if (event.key === "ArrowLeft") spin(-1);
@@ -375,11 +405,22 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     setHoverId(null);
   }
 
+  function placeCard(x: number, y: number) {
+    if (window.matchMedia("(max-width: 767px)").matches) return { x: 12, y: window.innerHeight - 12 };
+    const width = 300;
+    const height = 240;
+    return {
+      x: Math.min(window.innerWidth - width / 2 - 12, Math.max(width / 2 + 12, x)),
+      y: Math.min(window.innerHeight - 12, Math.max(height + 18, y)),
+    };
+  }
+
   function holdCard(unit: Unit, x: number, y: number, pin: boolean) {
     if (pinned.current && !pin) return;
     if (cardTimer.current) window.clearTimeout(cardTimer.current);
     if (pin) pinned.current = true;
-    setCard((current) => (current?.id === unit.id && !pin ? current : { id: unit.id, x, y }));
+    const point = placeCard(x, y);
+    setCard((current) => (current?.id === unit.id && !pin ? current : { id: unit.id, x: point.x, y: point.y }));
   }
 
   function releaseCard() {
@@ -393,7 +434,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   function enterUnit(unit: Unit, origen: string, tab?: UnitTab) {
     forgetCard();
     const plantaImagen = data.buildings.flatMap((item) => item.floors).find((item) => item.id === unit.floor_id)?.plano ?? null;
-    const order: UnitTab[] = ["planta3d", "planos", "galeria", "vistas", "recorrido", "video"];
+    const order: UnitTab[] = ["galeria", "vistas", "planta3d", "planos", "recorrido", "video"];
     const next = tab && tabReady(unit, tab, plantaImagen) ? tab : order.find((item) => tabReady(unit, item, plantaImagen)) ?? "planos";
     setUnitTab(next);
     setPhoto(0);
@@ -519,7 +560,9 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       url.searchParams.set("unidad", loc.unidad);
     } else if (loc.planta) url.searchParams.set("planta", loc.planta);
     else if (loc.escena) url.searchParams.set("escena", loc.escena);
-    const state = { showroom: 1 };
+    const nextDepth = mode === "push" ? depth.current + 1 : depth.current;
+    if (mode === "push") depth.current = nextDepth;
+    const state = { showroom: 1, depth: nextDepth };
     if (mode === "replace") history.replaceState(state, "", url);
     else history.pushState(state, "", url);
   }
@@ -611,31 +654,76 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   }
 
   function stepBack() {
-    if (window.history.state?.showroom) {
+    if (unitId) {
+      if (depth.current > 0) {
+        history.back();
+        return;
+      }
+      setUnitId(null);
+      setHighlightId(null);
+      if (floor) pushLocation({ planta: floor.clave }, "replace");
+      setEntered(true);
+      setPhase("planta");
+      return;
+    }
+    if (phase === "planta") {
+      if (depth.current > 0) {
+        history.back();
+        return;
+      }
+      setPhase("escena");
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      const current = walk[sceneIndex] ?? walk[0];
+      if (current) pushLocation({ escena: sceneKey(current.nombre) }, "replace");
+      return;
+    }
+    if (depth.current > 0) {
       history.back();
       return;
     }
-    if (unitId) {
-      setUnitId(null);
-      if (floor) pushLocation({ planta: floor.clave }, "replace");
-      return;
-    }
-    setPhase("escena");
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
+    setEntered(false);
   }
 
   function goPlans() {
-    const top = tower?.floors[0];
-    if (!top) return;
+    const source = building?.floors ?? [];
+    const next = firstResidentialFloor(source);
+    if (!next) return;
     if (!lite && scene?.vuelo_url) {
-      setAfterBridge({ kind: "floor", id: top.id });
+      setAfterBridge({ kind: "floor", id: next.id });
       setBridge(scene.vuelo_url);
       return;
     }
-    openFloor(top.id, "push");
+    openFloor(next.id, "push");
   }
 
+  useEffect(() => {
+    if (!unitId) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") stepBack();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [unitId, floor, phase, sceneIndex, lite, walk]);
+
+  const floorPlate = (() => {
+    if (!floorId) return null;
+    const pts = data.overlays.filter((overlay) => overlay.contenedor === "floor" && overlay.contenedor_id === floorId).flatMap((overlay) => overlay.puntos);
+    if (pts.length < 3) return null;
+    let x0 = 1;
+    let y0 = 1;
+    let x1 = 0;
+    let y1 = 0;
+    for (const [x, y] of pts) {
+      x0 = Math.min(x0, x);
+      y0 = Math.min(y0, y);
+      x1 = Math.max(x1, x);
+      y1 = Math.max(y1, y);
+    }
+    const padX = (x1 - x0) * 0.08;
+    const padY = (y1 - y0) * 0.08;
+    return { x0: x0 - padX, y0: y0 - padY, x1: x1 + padX, y1: y1 + padY };
+  })();
   const image = !entered ? cover?.imagen_url ?? data.facade : phase === "planta" ? floor?.plano ?? scene?.imagen_url ?? data.facade : scene?.imagen_url ?? data.facade;
   const fitCover = phase !== "planta" && scene?.tipo !== "barrio" && scene?.tipo !== "masterplan";
   const veils = disp && phase === "escena" && scene?.tipo === "exterior" && !bridge && !playing;
@@ -659,6 +747,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         zoom={zoom}
         pan={pan}
         soft={!entered}
+        plate={narrow && phase === "planta" ? floorPlate : null}
         backdrop={phase === "planta" ? scene?.imagen_url ?? data.facade : null}
         video={bridge ?? (playing && videos.current ? videos.current : null)}
         poster={image}
@@ -674,6 +763,12 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         }) : []}
         onPointerDown={(event) => {
           moved.current = false;
+          pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          if (pointers.current.size === 2 && phase === "planta") {
+            const [a, b] = [...pointers.current.values()];
+            pinch.current = { dist: Math.hypot(a!.x - b!.x, a!.y - b!.y) || 1, zoom };
+            swipe.current = null;
+          }
           const target = event.target as HTMLElement;
           if (!target.closest("g") && !target.closest(".hover-card")) {
             pinned.current = false;
@@ -686,6 +781,13 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           if (phase === "escena" && entered && !bridge) swipe.current = { x: event.clientX, y: event.clientY, lx: event.clientX, ly: event.clientY, shift: coverShift };
         }}
         onPointerMove={(event) => {
+          if (pointers.current.has(event.pointerId)) pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          if (pinch.current && pointers.current.size === 2) {
+            const [a, b] = [...pointers.current.values()];
+            const dist = Math.hypot(a!.x - b!.x, a!.y - b!.y) || 1;
+            setZoom(Math.min(4, Math.max(1, pinch.current.zoom * (dist / pinch.current.dist))));
+            return;
+          }
           if (swipe.current && phase === "escena" && !bridge) {
             swipe.current.lx = event.clientX;
             swipe.current.ly = event.clientY;
@@ -708,6 +810,8 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           setPan({ x: drag.current.px + dx, y: drag.current.py + dy });
         }}
         onPointerUp={(event) => {
+          pointers.current.delete(event.pointerId);
+          if (pointers.current.size < 2) pinch.current = null;
           drag.current = null;
           const start = swipe.current;
           swipe.current = null;
@@ -780,15 +884,17 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
                 points={overlay.puntos.map((point) => point.join(",")).join(" ")}
                 fill={aerial ? "#c4a574" : color}
                 fillOpacity={on ? fillOpacity : 0.04}
-                stroke="transparent"
+                stroke="none"
+                pointerEvents="fill"
                 style={{ transition: "fill-opacity 180ms ease" }}
               />
               {exterior && veils && (
                 <polygon
-                  points={bandOf(overlay.puntos).map((point) => point.join(",")).join(" ")}
+                  points={bandOf(overlay.puntos, narrow).map((point) => point.join(",")).join(" ")}
                   fill={color}
                   fillOpacity={hovered ? 0.92 : on ? 0.78 : 0.12}
-                  stroke="transparent"
+                  stroke="none"
+                  vectorEffect="non-scaling-stroke"
                   style={{ transition: "fill-opacity 180ms ease" }}
                   pointerEvents="none"
                 />
@@ -829,7 +935,23 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         />
       )}
 
-      <div className={`chrome absolute left-4 top-4 z-[36] ${active ? "with-unit" : ""}`}>
+      {!entered && (
+        <div className="cover-gate">
+          {data.project.logo && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={data.project.logo} alt="" className="cover-logo" />
+          )}
+          <h1>{data.project.nombre}</h1>
+          {data.project.direccion && <p className="addr">{data.project.direccion}</p>}
+          <button type="button" data-testid="entrar" className="cover-enter" onClick={enter}>{lang === "en" ? "Enter" : "Entrar"}</button>
+          <div className="langs" role="group" aria-label={lang === "en" ? "Language" : "Idioma"}>
+            <button type="button" className={lang === "es" ? "on" : ""} onClick={() => { setLang("es"); localStorage.setItem("adastra-lang", "es"); }}>ES</button>
+            <button type="button" className={lang === "en" ? "on" : ""} onClick={() => { setLang("en"); localStorage.setItem("adastra-lang", "en"); }}>EN</button>
+          </div>
+        </div>
+      )}
+
+      {entered && <div className={`chrome absolute left-4 top-4 z-[36] ${active ? "with-unit" : ""}`}>
         <div className="flex items-center gap-2">
           <button type="button" aria-label="Menú" className="round accent" onClick={() => setSheet(sheet === "menu" ? null : "menu")}>
             <span className="flex flex-col gap-1">
@@ -844,10 +966,10 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           </button>
         </div>
         {entered && <p className="context-label">{contextText}</p>}
-      </div>
+      </div>}
 
       {entered && !active && (
-        <div className="absolute right-4 top-4 z-20 flex items-center gap-2">
+        <div className="top-pills">
           {disp && phase === "escena" ? (
             <>
               <button type="button" className={filterPop === "area" ? "pill on" : "pill"} onClick={() => setFilterPop(filterPop === "area" ? null : "area")}>Filtrar área</button>
@@ -856,9 +978,9 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
             </>
           ) : (
             <>
-              <button type="button" className={phase === "escena" && !disp ? "pill on" : "pill"} onClick={() => { setDisponibilidad(false); const index = walk.findIndex((item) => item.tipo === "aereo" || item.tipo === "exterior"); setEntered(true); setPhase("escena"); setUnitId(null); if (index >= 0) setSceneIndex(index); }}>Vista aérea</button>
-              {building && building.floors[0] && <button type="button" className={phase === "planta" ? "pill on" : "pill"} onClick={() => { setDisponibilidad(false); goPlans(); }}>Ver plantas</button>}
-              <button type="button" className="pill" onClick={() => setSheet("galeria")}>Galería</button>
+              <button type="button" className={phase === "escena" && !disp ? "pill on" : "pill"} onClick={() => { setDisponibilidad(false); const index = walk.findIndex((item) => item.tipo === "aereo" || item.tipo === "exterior"); setEntered(true); setPhase("escena"); setUnitId(null); if (index >= 0) setSceneIndex(index); }}>{lang === "en" ? "Aerial view" : "Vista aérea"}</button>
+              {building && building.floors[0] && <button type="button" className={phase === "planta" ? "pill on" : "pill"} onClick={() => { setDisponibilidad(false); goPlans(); }}>{lang === "en" ? "View plans" : "Ver plantas"}</button>}
+              <button type="button" className="pill" onClick={() => setSheet("galeria")}>{lang === "en" ? "Gallery" : "Galería"}</button>
             </>
           )}
           <button type="button" aria-label="Pantalla completa" className="round" onClick={() => { if (!document.fullscreenElement) void document.documentElement.requestFullscreen(); else void document.exitFullscreen(); }}>
@@ -904,6 +1026,14 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         </div>
       )}
 
+      {veils && !active && (
+        <div className="legend" data-testid="legend">
+          <span><i style={{ background: "#1f8a5b" }} />Disponible</span>
+          <span><i style={{ background: "#c49214" }} />Reservada</span>
+          <span><i style={{ background: "#b42318" }} />Vendida</span>
+        </div>
+      )}
+
       {entered && disp && phase === "escena" && !active && !filterPop && (
         <p className="pointer-events-none absolute right-4 top-[4.6rem] z-20 rounded-lg bg-[#1c2733]/80 px-3 py-1 text-xs text-white">Disponibilidad · Departamentos</p>
       )}
@@ -921,6 +1051,16 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           <button type="button" aria-label="Acercar" className="round" onClick={() => setZoom((value) => Math.min(4, value + 0.25))}>+</button>
           <button type="button" aria-label="Alejar" className="round" onClick={() => setZoom((value) => Math.max(1, value - 0.25))}>−</button>
         </div>
+      )}
+
+      {showRail && tower && (
+        <label className="floor-pick">
+          <select aria-label="Planta" value={floorId ?? ""} onChange={(event) => openFloor(event.target.value, "replace")}>
+            {tower.floors.map((item) => (
+              <option key={item.id} value={item.id}>{`Piso ${floorMark(item.nombre, item.numero)}`}</option>
+            ))}
+          </select>
+        </label>
       )}
 
       {showRail && tower && (
@@ -946,6 +1086,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           fallback={data.facade}
           plantaImagen={data.buildings.flatMap((item) => item.floors).find((item) => item.id === active.floor_id)?.plano ?? null}
           footprint={data.overlays.find((overlay) => overlay.contenedor === "floor" && overlay.vinculo_id === active.id)?.puntos ?? null}
+          vistaPoints={data.scenes.find((item) => item.imagen_url === active.vista_url)?.hotspots.find((hotspot) => hotspot.vinculo_id === active.id)?.puntos ?? null}
           sent={sent}
           sending={sending}
           error={error}
@@ -970,7 +1111,17 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           onClose={() => setSheet(null)}
           onPick={(action) => {
             setSheet(null);
-            if (action === "intro") { setEntered(false); setUnitId(null); setDisponibilidad(false); return; }
+            if (action === "intro") {
+              setEntered(false);
+              setUnitId(null);
+              setPhase("escena");
+              setDisponibilidad(false);
+              depth.current = 0;
+              const url = new URL(window.location.href);
+              url.search = "";
+              history.replaceState({ showroom: 1, depth: 0 }, "", url.pathname);
+              return;
+            }
             if (action === "edificio") {
               setDisponibilidad(false);
               const index = walk.findIndex((item) => item.tipo === "exterior");
@@ -1137,6 +1288,7 @@ function Stage({
   zoom,
   pan,
   soft = false,
+  plate = null,
   backdrop = null,
   marks = [],
   video,
@@ -1158,6 +1310,7 @@ function Stage({
   zoom: number;
   pan: { x: number; y: number };
   soft?: boolean;
+  plate?: { x0: number; y0: number; x1: number; y1: number } | null;
   backdrop?: string | null;
   marks?: { id: string; x: number; y: number; color: string; label: string; dim: boolean }[];
   video: string | null;
@@ -1195,7 +1348,11 @@ function Stage({
     node.addEventListener("wheel", listener, { passive: false });
     return () => node.removeEventListener("wheel", listener);
   }, [onWheel, stageRef]);
-  const frame = cover ? coverFrame(box.w, box.h, natural.w, natural.h, focus.x, focus.y, shift) : contain(box.w, box.h, natural.w, natural.h);
+  const frame = plate
+    ? plateFrame(box.w, box.h, natural.w, natural.h, plate)
+    : cover
+      ? coverFrame(box.w, box.h, natural.w, natural.h, focus.x, focus.y, shift)
+      : contain(box.w, box.h, natural.w, natural.h);
   return (
     <div
       ref={stageRef}
@@ -1305,7 +1462,7 @@ function Drawer({ title, onClose, children }: { title: string; onClose: () => vo
       <div className="handle" />
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-serif text-3xl">{title}</h2>
-        <button type="button" onClick={onClose}>Cerrar</button>
+        <button type="button" className="round" aria-label="Cerrar" onClick={onClose}>×</button>
       </div>
       {children}
     </aside>

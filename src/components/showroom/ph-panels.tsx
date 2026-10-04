@@ -55,7 +55,7 @@ export function HoverCard({
   const tone = statusTone(unit.estado);
   const price = unit.mostrar_precio && unit.precio != null ? formatUsd(unit.precio) : "Consultar precio";
   return (
-    <div className="hover-card" data-testid="hover-card" style={{ left: x, top: y, transform: "translate(-50%, calc(-100% - 14px))" }} onMouseEnter={onKeep} onMouseLeave={onLeave}>
+    <div className="hover-card" data-testid="hover-card" style={{ left: x, top: y }} onMouseEnter={onKeep} onMouseLeave={onLeave}>
       <p className="status-line" style={{ color: tone.color }}>{tone.label.toUpperCase()} <i /></p>
       <p className="mt-1 text-center text-3xl font-semibold tracking-wide">{unit.codigo}</p>
       <div className="mt-3 flex items-center justify-center gap-4 text-[13px] text-[#8a7358]">
@@ -116,7 +116,7 @@ export function PhMenu({
             )}
             <p className="text-2xl tracking-[0.18em]">{brand}</p>
           </div>
-          <button type="button" aria-label="Cerrar" className="text-xl" onClick={onClose}>×</button>
+          <button type="button" aria-label="Cerrar" className="round" onClick={onClose}>×</button>
         </div>
         <nav className="mt-6 px-6">
           {MENU.map(([action, label]) => (
@@ -297,8 +297,6 @@ function Arrows({ index, total, onChange }: { index: number; total: number; onCh
 
 function Panorama({ tour }: { tour: Tour }) {
   const [help, setHelp] = useState(true);
-  const [shift, setShift] = useState(0);
-  const drag = useRef<{ x: number; shift: number } | null>(null);
   const kind = tourEmbed(tour.proveedor, tour.url);
   if (kind === "iframe") {
     return (
@@ -308,15 +306,126 @@ function Panorama({ tour }: { tour: Tour }) {
       </div>
     );
   }
+  return <Equirect url={tour.url} title={tour.titulo} onInteract={() => setHelp(false)} help={help} />;
+}
+
+function Equirect({ url, title, help, onInteract }: { url: string; title: string; help: boolean; onInteract: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const view = useRef({ yaw: 0.2, pitch: 0, fov: 1.15 });
+  const drag = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
+  const interact = useRef(onInteract);
+  interact.current = onInteract;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const gl = canvas.getContext("webgl", { preserveDrawingBuffer: true, alpha: false });
+    if (!gl) return;
+    const compile = (type: number, source: string) => {
+      const shader = gl.createShader(type);
+      if (!shader) return null;
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      return shader;
+    };
+    const program = gl.createProgram();
+    if (!program) return;
+    const vertex = compile(gl.VERTEX_SHADER, "attribute vec2 p; varying vec2 v; void main(){ v=p; gl_Position=vec4(p,0.0,1.0); }");
+    const fragment = compile(gl.FRAGMENT_SHADER, `
+      precision mediump float;
+      varying vec2 v;
+      uniform sampler2D tex;
+      uniform float yaw, pitch, fov, aspect;
+      const float PI = 3.14159265;
+      vec3 rotY(vec3 p, float a){ float c=cos(a), s=sin(a); return vec3(c*p.x+s*p.z, p.y, -s*p.x+c*p.z); }
+      vec3 rotX(vec3 p, float a){ float c=cos(a), s=sin(a); return vec3(p.x, c*p.y-s*p.z, s*p.y+c*p.z); }
+      void main(){
+        vec3 dir = normalize(vec3(v.x*aspect*tan(fov*0.5), v.y*tan(fov*0.5), -1.0));
+        dir = rotX(dir, pitch);
+        dir = rotY(dir, yaw);
+        float lon = atan(dir.x, -dir.z);
+        float lat = asin(clamp(dir.y, -1.0, 1.0));
+        gl_FragColor = texture2D(tex, vec2(lon/(2.0*PI)+0.5, 0.5-lat/PI));
+      }
+    `);
+    if (!vertex || !fragment) return;
+    gl.attachShader(program, vertex);
+    gl.attachShader(program, fragment);
+    gl.linkProgram(program);
+    gl.useProgram(program);
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(program, "p");
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    let alive = true;
+    const draw = () => {
+      if (!alive || !image.complete || !image.naturalWidth) return;
+      const width = canvas.clientWidth || 640;
+      const height = canvas.clientHeight || 360;
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.uniform1f(gl.getUniformLocation(program, "yaw"), view.current.yaw);
+      gl.uniform1f(gl.getUniformLocation(program, "pitch"), view.current.pitch);
+      gl.uniform1f(gl.getUniformLocation(program, "fov"), view.current.fov);
+      gl.uniform1f(gl.getUniformLocation(program, "aspect"), canvas.width / Math.max(1, canvas.height));
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    };
+    image.onload = () => {
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      draw();
+    };
+    image.src = url;
+    const onResize = () => draw();
+    window.addEventListener("resize", onResize);
+    const node = canvas;
+    const onDown = (event: PointerEvent) => {
+      interact.current();
+      drag.current = { x: event.clientX, y: event.clientY, yaw: view.current.yaw, pitch: view.current.pitch };
+    };
+    const onMove = (event: PointerEvent) => {
+      if (!drag.current) return;
+      view.current.yaw = drag.current.yaw - (event.clientX - drag.current.x) * 0.005;
+      view.current.pitch = Math.max(-1.1, Math.min(1.1, drag.current.pitch + (event.clientY - drag.current.y) * 0.004));
+      draw();
+    };
+    const onUp = () => { drag.current = null; };
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      view.current.fov = Math.max(0.5, Math.min(1.8, view.current.fov + (event.deltaY > 0 ? 0.06 : -0.06)));
+      draw();
+    };
+    node.addEventListener("pointerdown", onDown);
+    node.addEventListener("pointermove", onMove);
+    node.addEventListener("pointerup", onUp);
+    node.addEventListener("pointerleave", onUp);
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      alive = false;
+      window.removeEventListener("resize", onResize);
+      node.removeEventListener("pointerdown", onDown);
+      node.removeEventListener("pointermove", onMove);
+      node.removeEventListener("pointerup", onUp);
+      node.removeEventListener("pointerleave", onUp);
+      node.removeEventListener("wheel", onWheel);
+    };
+  }, [url]);
+
   return (
-    <div
-      className="relative h-full w-full overflow-hidden"
-      onPointerDown={(event) => { setHelp(false); drag.current = { x: event.clientX, shift }; }}
-      onPointerMove={(event) => { if (!drag.current) return; setShift(drag.current.shift + event.clientX - drag.current.x); }}
-      onPointerUp={() => { drag.current = null; }}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={tour.url} alt={tour.titulo} className="h-full max-w-none object-cover" style={{ width: "160%", transform: `translateX(${shift}px)` }} draggable={false} />
+    <div className="relative h-full w-full">
+      <canvas ref={canvasRef} aria-label={title} className="h-full w-full cursor-grab" />
       {help && <HelpOverlay />}
     </div>
   );
@@ -365,6 +474,7 @@ export function UnitSheet({
   fallback,
   plantaImagen,
   footprint,
+  vistaPoints = null,
   sent,
   sending,
   error,
@@ -373,7 +483,6 @@ export function UnitSheet({
   onClose,
   onChangeFloor,
   onWhatsapp,
-  onShare,
   onLead,
 }: {
   unit: Unit;
@@ -384,6 +493,7 @@ export function UnitSheet({
   fallback: string;
   plantaImagen: string | null;
   footprint: [number, number][] | null;
+  vistaPoints?: [number, number][] | null;
   sent: boolean;
   sending: boolean;
   error: string;
@@ -452,11 +562,10 @@ export function UnitSheet({
   return (
     <section className="unit-sheet" data-testid="unit-panel">
       <aside className="unit-side">
-        <div className="relative">
+        <div className="sheet-hero relative">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={hero} alt="" className="h-36 w-full object-cover" />
-          <button type="button" aria-label="Compartir unidad" className="round absolute right-3 top-3" onClick={onShare}><QrIcon /></button>
-          <button type="button" aria-label="Cerrar ficha" className="absolute left-3 top-3 text-sm text-white" onClick={onClose}>Cerrar</button>
+          <img src={hero} alt="" className="h-36 w-full object-cover md:h-36" />
+          <button type="button" aria-label="Cerrar ficha" className="round absolute left-3 top-3" onClick={onClose}>×</button>
         </div>
         <div className="body">
           <div className="flex items-start justify-between gap-2">
@@ -467,10 +576,11 @@ export function UnitSheet({
             <p className="status-line" style={{ color: tone.color }}>{tone.label.toUpperCase()} <i /></p>
           </div>
           {blocked && <p className="mt-2 text-sm text-[#8a8178]">Esta unidad no está disponible</p>}
-          <div className="mt-4 flex flex-wrap gap-2">
-            {TABS.map((item) => (
-              <button key={item.id} type="button" className={tab === item.id ? "icon-tab on" : "icon-tab"} disabled={!ready(unit, item.id, plantaImagen)} onClick={() => setTab(item.id)} aria-label={item.label} title={item.label}>
-                <TabGlyph name={item.id} />
+          <div className="tab-row mt-4">
+            {TABS.filter((item) => ready(unit, item.id, plantaImagen)).map((item) => (
+              <button key={item.id} type="button" className={tab === item.id ? "icon-tab on" : "icon-tab"} onClick={() => setTab(item.id)} aria-label={item.label}>
+                <span className="bubble"><TabGlyph name={item.id} /></span>
+                <span className="cap">{item.label}</span>
               </button>
             ))}
           </div>
@@ -520,12 +630,18 @@ export function UnitSheet({
           )}
         </div>
         <div className="dock">
-          <button type="button" className="text-sm font-medium" onClick={() => setAsk((open) => !open)}>Solicitar información</button>
-          <a className="round light" style={{ height: "2.1rem", width: "2.1rem" }} href={`mailto:${project.contacto.email}`} aria-label="Email">@</a>
-          <a className="round light" style={{ height: "2.1rem", width: "2.1rem" }} href={`tel:${project.contacto.telefono}`} aria-label="Teléfono">☎</a>
-          {ficha.whatsapp && <button type="button" className="round light" style={{ height: "2.1rem", width: "2.1rem" }} onClick={onWhatsapp} aria-label="WhatsApp">W</button>}
-          {shown && <button type="button" className="outline-pill" onClick={() => setQuoteOpen((open) => !open)}>Cotizar</button>}
-          {ficha.pdf && <a className="outline-pill" href={`/api/public/ficha?slug=${project.slug}&codigo=${encodeURIComponent(unit.codigo)}`} target="_blank" rel="noreferrer">PDF</a>}
+          <div className="dock-row">
+            <button type="button" className="ask" onClick={() => setAsk((open) => !open)}>Solicitar información</button>
+            <a className="round light" href={`mailto:${project.contacto.email}`} aria-label="Email"><MailIcon /></a>
+            <a className="round light" href={`tel:${project.contacto.telefono}`} aria-label="Teléfono"><PhoneIcon /></a>
+            {ficha.whatsapp && <button type="button" className="round light" onClick={onWhatsapp} aria-label="WhatsApp"><WhatsIcon /></button>}
+          </div>
+          {(shown || ficha.pdf) && (
+            <div className="dock-row">
+              {shown && <button type="button" className="outline-pill" onClick={() => setQuoteOpen((open) => !open)}>Cotizar</button>}
+              {ficha.pdf && <a className="outline-pill" href={`/api/public/ficha?slug=${project.slug}&codigo=${encodeURIComponent(unit.codigo)}`} target="_blank" rel="noreferrer">PDF</a>}
+            </div>
+          )}
         </div>
       </aside>
       <div className="unit-main">
@@ -537,8 +653,15 @@ export function UnitSheet({
           </>
         )}
         {tab === "vistas" && unit.vista_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={unit.vista_url} alt={unit.orientacion ? `Vista al ${unit.orientacion}` : "Vista"} className="fit" style={{ objectFit: "cover", objectPosition: unit.vista_encuadre }} />
+          <div className="vista-frame">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={unit.vista_url} alt={unit.orientacion ? `Vista al ${unit.orientacion}` : "Vista"} className="fit" style={{ objectPosition: unit.vista_encuadre }} />
+            {vistaPoints && vistaPoints.length >= 3 && (
+              <svg viewBox="0 0 1 1" preserveAspectRatio="xMidYMid meet" className="absolute inset-0 h-full w-full">
+                <polygon points={vistaPoints.map((point) => point.join(",")).join(" ")} fill="#c4a574" fillOpacity="0.45" stroke="#fff" strokeWidth="0.004" vectorEffect="non-scaling-stroke" />
+              </svg>
+            )}
+          </div>
         )}
         {tab === "planta3d" && unit.planta3d && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -572,13 +695,38 @@ function FloorHighlight({ src, points, codigo, compact = false }: { src: string;
   return (
     <div className={compact ? "relative h-16" : "relative h-full w-full"}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={compact ? "" : `Planta con ${codigo}`} className={compact ? "h-full w-full object-cover" : "fit"} />
+      <img src={src} alt={compact ? "" : `Planta con ${codigo}`} className={compact ? "h-full w-full object-fill" : "fit"} />
       {points && (
         <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
-          <polygon points={points.map((point) => point.join(",")).join(" ")} fill="#c4a574" fillOpacity={compact ? 0.85 : 0.35} />
+          <polygon points={points.map((point) => point.join(",")).join(" ")} fill="#c4a574" fillOpacity={compact ? 0.85 : 0.35} stroke="none" />
         </svg>
       )}
     </div>
+  );
+}
+
+function MailIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <path fill="none" stroke="currentColor" strokeWidth="1.4" d="M2 3.5h12v9H2z" />
+      <path fill="none" stroke="currentColor" strokeWidth="1.4" d="M2 4.5l6 4 6-4" />
+    </svg>
+  );
+}
+
+function PhoneIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <path fill="none" stroke="currentColor" strokeWidth="1.4" d="M5.2 2.5h2L8 5.2 6.6 6.4a8 8 0 0 0 3 3L11 8.2l2.6.8v2a1.2 1.2 0 0 1-1.3 1.2A10.5 10.5 0 0 1 3.8 4.8 1.2 1.2 0 0 1 5.2 2.5z" />
+    </svg>
+  );
+}
+
+function WhatsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <path fill="currentColor" d="M8 1.6a6.3 6.3 0 0 0-5.4 9.5L1.6 14.4l3.4-1a6.3 6.3 0 1 0 3-11.8zm3.4 8.9c-.1.4-.7.7-1 .8-.3 0-.6.1-2-.5-1.6-.7-2.7-2.3-2.8-2.4-.1-.1-.8-1-.8-1.9s.5-1.4.7-1.5h.5c.1 0 .3 0 .4.3.2.4.6 1.4.6 1.5.1.1 0 .2 0 .3-.1.1-.1.2-.2.3l-.3.3c-.1.1-.2.2-.1.4.1.2.6 1 1.3 1.6.9.8 1.6 1 1.8 1.1.2.1.3 0 .4-.1l.5-.6c.1-.2.3-.1.4-.1h.5c.2 0 .4.1.5.3.1.3.4 1.1.3 1.3z" />
+    </svg>
   );
 }
 

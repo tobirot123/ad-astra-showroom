@@ -2,8 +2,9 @@ import { computeMetrics, deltaPct, type MetricsSnapshot } from "@/lib/domain/met
 import { can, canSeeLead } from "@/lib/domain/permissions";
 import type { Actor, Database, Project, Unit } from "@/lib/domain/types";
 import { cashPrice, financedQuote, hoursLeftLabel, pendingBadge, publicStatus } from "@/lib/services/engine";
-import { floorKey } from "@/lib/domain/showroom-flow";
+import { floorKey, isRealTour } from "@/lib/domain/showroom-flow";
 import { withEffectiveAreas } from "@/lib/domain/units";
+import { galleryHeroRank } from "@/lib/domain/gallery-rank";
 import { encuadreVista, vistaPorOrientacion } from "@/lib/domain/vista";
 import { celdasDeGrilla, plantaDePiso, recortarPoligono } from "@/lib/domain/fachada-grilla";
 
@@ -91,6 +92,10 @@ export function buildShowroom(db: Database, slug: string) {
       const vistaUrl = unit.vista === "sin" ? null : vistaPropia ?? vistaPorOrientacion(unit.orientacion, project.settings.vistas_orientacion);
       const floorLinks = db.media_links.filter((l) => l.entidad === "floor" && l.entidad_id === unit.floor_id);
       const mediaOf = (rol: string) => urlsFor(db, links, rol);
+      const galeria = mediaOf("galeria")
+        .map((url, index) => ({ url, index }))
+        .sort((a, b) => galleryHeroRank(a.url) - galleryHeroRank(b.url) || a.index - b.index)
+        .map((item) => item.url);
       const overlay = db.overlays.find(
         (o) => o.project_id === project.id && o.estado === "published" && o.contenedor === "facade" && o.vinculo_tipo === "unit" && o.vinculo_id === unit.id,
       );
@@ -101,7 +106,11 @@ export function buildShowroom(db: Database, slug: string) {
           (typology && item.entidad === "typology" && item.entidad_id === typology.id) ||
           (floor && item.entidad === "floor" && item.entidad_id === floor.id),
         )
-        .sort((a, b) => a.orden - b.orden)[0];
+        .sort((a, b) => a.orden - b.orden)
+        .find((item) => {
+          const media = db.media.find((entry) => entry.url === item.url);
+          return isRealTour(item.proveedor, item.url, media?.ancho, media?.alto);
+        });
       return {
         id: unit.id,
         codigo: unit.codigo,
@@ -134,7 +143,7 @@ export function buildShowroom(db: Database, slug: string) {
         values: Object.fromEntries(fields.map((f) => [f.clave, unit.custom_values[f.clave] ?? null])),
         plano: mediaOf("plano")[0] ?? null,
         planta3d: mediaOf("render")[0] ?? null,
-        galeria: mediaOf("galeria"),
+        galeria,
         renders: [...mediaOf("render"), ...mediaOf("galeria")],
         acabados: mediaOf("acabado"),
         videos: mediaOf("video"),
@@ -142,7 +151,11 @@ export function buildShowroom(db: Database, slug: string) {
         vista_encuadre: encuadreVista(floor?.numero ?? 0, Boolean(vistaPropia)),
         quote: estado === "consultar" ? null : financedQuote(db, unit),
         polygon: overlay?.puntos ?? null,
-        tour: tour ? { titulo: tour.titulo, proveedor: tour.proveedor, url: tour.url } : unit.tour_url ? { titulo: "Tour 360", proveedor: "url" as const, url: unit.tour_url } : null,
+        tour: tour
+          ? { titulo: tour.titulo, proveedor: tour.proveedor, url: tour.url }
+          : unit.tour_url && isRealTour("url", unit.tour_url)
+            ? { titulo: "Tour 360", proveedor: "url" as const, url: unit.tour_url }
+            : null,
       };
     })
     .sort((a, b) => a.piso_numero - b.piso_numero || a.codigo.localeCompare(b.codigo, "es"));

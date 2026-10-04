@@ -33,6 +33,16 @@ export function videosToLoad(scenes: FlowScene[], index: number, lite: boolean):
   };
 }
 
+const TOUR_HOST = /matterport\.com|kuula\.co|3dvista|pano2vr|lumalabs|roundme|theasys\.io|momento360/i;
+
+/** Un recorrido se muestra solo si es un visor embebido o una foto equirectangular 2:1. */
+export function isRealTour(proveedor: string, url: string, ancho?: number | null, alto?: number | null) {
+  if (TOUR_HOST.test(url)) return true;
+  if (["matterport", "kuula", "3dvista", "pano2vr", "luma"].includes(proveedor)) return true;
+  if (ancho && alto && ancho / alto >= 1.9 && ancho / alto <= 2.15) return true;
+  return false;
+}
+
 export function tourEmbed(proveedor: string, url: string): "iframe" | "panorama" {
   if (/\.(svg|png|jpe?g|webp)(\?|$)/i.test(url)) return "panorama";
   const known = ["matterport", "kuula", "3dvista", "pano2vr", "luma"];
@@ -58,6 +68,14 @@ export function sortUnits<T extends FlowUnit>(units: T[], sort: FlowFilters["sor
     return a.piso_numero - b.piso_numero || a.codigo.localeCompare(b.codigo, "es");
   });
   return copy;
+}
+
+/** La primera planta residencial: el piso más bajo con unidades libres, si no el piso 1. */
+export function firstResidentialFloor<T extends { numero: number; libres: number }>(floors: T[]): T | null {
+  const homes = floors.filter((floor) => floor.numero >= 1 && floor.numero < 19);
+  const withStock = homes.filter((floor) => floor.libres > 0).sort((a, b) => a.numero - b.numero);
+  if (withStock[0]) return withStock[0];
+  return homes.slice().sort((a, b) => a.numero - b.numero)[0] ?? null;
 }
 
 export function floorKey(numero: number) {

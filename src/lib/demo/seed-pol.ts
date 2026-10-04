@@ -447,26 +447,7 @@ export function applyPol(db: Database, now: Date) {
     orden: index + 1,
   }));
 
-  const tourByTipo: Record<string, string> = {
-    Monoambiente: `${ROOT}/interiores/int-04_101-201.webp`,
-    "1 dormitorio": `${ROOT}/interiores/int-06_102-202.webp`,
-    "2 dormitorios": `${ROOT}/interiores/int-16_501.webp`,
-    "3 dormitorios": `${ROOT}/interiores/int-18_904.webp`,
-  };
-  db.tours = Object.entries(tourByTipo).flatMap(([nombre, url], index) => {
-    const id = typologies.get(nombre);
-    if (!id) return [];
-    return [{
-      id: seedId(4800 + index),
-      project_id: PROJECT,
-      entidad: "typology" as const,
-      entidad_id: id,
-      proveedor: "url" as const,
-      url,
-      titulo: `Recorrido ${nombre}`,
-      orden: index + 1,
-    }];
-  });
+  db.tours = [];
   db.construction_updates = [
     {
       id: seedId(4700),

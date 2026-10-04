@@ -454,6 +454,7 @@
   position: fixed;
   z-index: 35;
   width: min(18.5rem, calc(100vw - 1.5rem));
+  transform: translate(-50%, calc(-100% - 14px));
   border-radius: 1.35rem;
   background: white;
   color: var(--ink);
@@ -575,30 +576,67 @@
 
 .showroom .unit-side .dock {
   display: flex;
-  align-items: center;
-  gap: 0.35rem;
+  flex-direction: column;
+  gap: 0.45rem;
   border-top: 1px solid #ece7e1;
-  padding: 0.65rem 0.75rem;
+  background: white;
+  padding: 0.65rem 0.75rem 0.75rem;
+}
+
+.showroom .dock-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.showroom .dock .ask {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font-size: 0.92rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.showroom .tab-row {
+  display: flex;
+  gap: 0.15rem;
+  overflow: auto;
 }
 
 .showroom .icon-tab {
-  display: grid;
-  height: 2.55rem;
-  width: 2.55rem;
-  place-items: center;
-  border-radius: 999px;
-  background: #f3eee6;
+  display: flex;
+  width: 3.35rem;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  background: transparent;
   color: #8a7358;
 }
 
+.showroom .icon-tab .bubble {
+  display: grid;
+  height: 2.35rem;
+  width: 2.35rem;
+  place-items: center;
+  border-radius: 999px;
+  background: #f3eee6;
+}
+
 .showroom .icon-tab.on {
-  background: #efe4d4;
   color: #6d5436;
+}
+
+.showroom .icon-tab.on .bubble {
+  background: #efe4d4;
   box-shadow: inset 0 0 0 1.5px #c4a574;
 }
 
-.showroom .icon-tab:disabled {
-  opacity: 0.35;
+.showroom .icon-tab .cap {
+  font-size: 0.62rem;
+  line-height: 1.1;
+  text-align: center;
 }
 
 .showroom .spec {
@@ -667,29 +705,182 @@
   }
 }
 
+.showroom .top-pills {
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.showroom .floor-pick {
+  display: none;
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  z-index: 24;
+  transform: translateX(-50%);
+}
+
+.showroom .floor-pick select {
+  border-radius: 999px;
+  background: var(--navy);
+  color: white;
+  padding: 0.55rem 1.1rem;
+  font-weight: 650;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+}
+
+.showroom .cover-gate {
+  position: absolute;
+  inset: 0;
+  z-index: 28;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.showroom .cover-gate h1 {
+  font-size: clamp(2.2rem, 6vw, 4.4rem);
+  font-weight: 560;
+  letter-spacing: 0.2em;
+}
+
+.showroom .cover-gate .addr {
+  max-width: 28rem;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.showroom .cover-logo {
+  height: 4.2rem;
+  width: auto;
+}
+
+.showroom .cover-enter {
+  margin-top: 0.4rem;
+  min-width: 11rem;
+  border-radius: 999px;
+  background: white;
+  padding: 0.8rem 2.2rem;
+  color: #1c2733;
+  font-weight: 680;
+}
+
+.showroom .langs {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.showroom .langs button {
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 0.35rem 0.75rem;
+  color: white;
+  font-size: 0.78rem;
+}
+
+.showroom .langs button.on {
+  background: white;
+  color: #1c2733;
+}
+
+.showroom .vista-frame {
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
+
 @media (max-width: 767px) {
-  .showroom .unit-sheet {
-    flex-direction: column;
-  }
-
-  .showroom .unit-side {
-    order: 2;
-    width: 100%;
-    flex: 0 0 48%;
-    max-height: 52%;
-    border-radius: 1.2rem 1.2rem 0 0;
-  }
-
-  .showroom .unit-main {
-    order: 1;
-    min-height: 42%;
-  }
-
   .showroom .hover-card {
     left: 0.75rem !important;
     right: 0.75rem;
     bottom: 0.75rem;
     top: auto !important;
     width: auto;
+    transform: none;
+  }
+
+  .showroom .top-pills {
+    left: 0.75rem;
+    right: 0.75rem;
+    top: 6.6rem;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .showroom .top-pills .pill {
+    padding: 0.38rem 0.65rem;
+    font-size: 0.74rem;
+    white-space: nowrap;
+  }
+
+  .showroom .floor-rail {
+    display: none;
+  }
+
+  .showroom .floor-pick {
+    display: block;
+  }
+
+  .showroom .plan-pill {
+    padding: 0.08rem 0.32rem 0.08rem 0.22rem;
+    font-size: 9px;
+    gap: 0.16rem;
+  }
+
+  .showroom .plan-pill i {
+    width: 0.38rem;
+    height: 0.38rem;
+  }
+
+  .showroom .unit-sheet {
+    flex-direction: column;
+    overflow: auto;
+  }
+
+  .showroom .unit-side {
+    order: 2;
+    width: 100%;
+    flex: none;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .showroom .unit-side .body {
+    overflow: visible;
+  }
+
+  .showroom .unit-side .dock {
+    position: sticky;
+    bottom: 0;
+  }
+
+  .showroom .unit-main {
+    order: 1;
+    flex: none;
+    height: 46vh;
+    min-height: 220px;
+  }
+
+  .showroom .sheet-hero {
+    height: 0;
+  }
+
+  .showroom .sheet-hero img {
+    display: none;
+  }
+
+  .showroom .sheet-hero .round {
+    position: fixed;
+    top: 0.8rem;
+    left: 0.8rem;
+    z-index: 40;
   }
 }
