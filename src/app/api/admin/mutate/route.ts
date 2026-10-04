@@ -29,6 +29,7 @@ import {
   saveIntegration,
   saveOverlays,
   saveFacadeMask,
+  saveFachadas,
   savePlan,
   savePoi,
   saveProgress,
@@ -44,7 +45,7 @@ import {
   type OpResult,
 } from "@/lib/services/engine";
 import { buildBootstrap } from "@/lib/services/present";
-import { ServiceError, type Actor, type Database, type FacadeMask, type FieldType, type Overlay, type Role, type UnitStatus } from "@/lib/domain/types";
+import { ServiceError, type Actor, type Database, type FacadeMask, type FachadaCara, type FieldType, type Overlay, type Role, type UnitStatus } from "@/lib/domain/types";
 import type { InheritedField } from "@/lib/domain/units";
 
 export const dynamic = "force-dynamic";
@@ -129,6 +130,8 @@ function run(db: Database, actor: Actor, op: string, body: Record<string, unknow
       return createCharacteristic(db, actor, projectId, String(body.nombre ?? ""));
     case "save_facade_mask":
       return saveFacadeMask(db, actor, projectId, String(body.viewpointId ?? ""), (body.mask ?? null) as FacadeMask | null, now);
+    case "save_fachadas":
+      return saveFachadas(db, actor, projectId, String(body.viewpointId ?? ""), (body.caras ?? []) as FachadaCara[], now);
     case "save_overlays":
       return saveOverlays(db, actor, projectId, (body.overlays ?? []) as never, now, {
         contenedor: (String(body.contenedor ?? "facade") as Overlay["contenedor"]),

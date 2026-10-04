@@ -64,6 +64,18 @@ function contain(boxW: number, boxH: number, imgW: number, imgH: number) {
   return { left: (boxW - width) / 2, top: (boxH - height) / 2, width, height };
 }
 
+/** object-fit: cover, centrado en la torre. El desplazamiento horizontal se recorta al encuadre. */
+function coverFrame(boxW: number, boxH: number, imgW: number, imgH: number, focusX: number, focusY: number, shiftX: number) {
+  const scale = Math.max(boxW / imgW, boxH / imgH);
+  const width = imgW * scale;
+  const height = imgH * scale;
+  let left = boxW / 2 - focusX * width + shiftX;
+  let top = boxH / 2 - focusY * height;
+  left = Math.min(0, Math.max(boxW - width, left));
+  top = Math.min(0, Math.max(boxH - height, top));
+  return { left, top, width, height };
+}
+
 function centroid(points: [number, number][]) {
   const x = points.reduce((sum, point) => sum + point[0], 0) / points.length;
   const y = points.reduce((sum, point) => sum + point[1], 0) / points.length;
@@ -107,9 +119,12 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const [matchCursor, setMatchCursor] = useState(0);
   const [tip, setTip] = useState<{ id: string; x: number; y: number } | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const [disp, setDisp] = useState(false);
+  const [coverShift, setCoverShift] = useState(0);
+  const [floorsOpen, setFloorsOpen] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
-  const swipe = useRef<{ x: number; y: number; lx: number; ly: number } | null>(null);
+  const swipe = useRef<{ x: number; y: number; lx: number; ly: number; shift: number } | null>(null);
   const moved = useRef(false);
 
   const scene = walk[sceneIndex] ?? walk[0];
@@ -161,6 +176,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     if (stored === "0") setLite(false);
     applySearch(window.location.search);
     const params = new URLSearchParams(window.location.search);
+    if (params.get("disp") === "1") setDisp(true);
     if (params.has("escena") || params.has("planta") || params.has("unidad")) {
       history.replaceState({ showroom: 1 }, "", window.location.href);
     }
@@ -178,6 +194,8 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     }
     setPlaying(Boolean(scene?.video_url) && !scene?.transicion_url);
   }, [entered, phase, sceneIndex, lite, scene?.video_url, scene?.transicion_url]);
+
+  useEffect(() => { setCoverShift(0); }, [sceneIndex]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -302,7 +320,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   }
 
   function zones(): Overlay[] {
-    if (!entered || !scene || bridge) return [];
+    if (!entered || !scene || bridge || (playing && phase === "escena")) return [];
     if (phase === "planta" && floorId) {
       return data.overlays.filter((overlay) => overlay.contenedor === "floor" && overlay.contenedor_id === floorId);
     }
@@ -310,7 +328,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     if (scene.tipo === "masterplan") {
       return data.overlays.filter((overlay) => overlay.contenedor === "masterplan" && overlay.contenedor_id === scene.building_id);
     }
-    if (scene.tipo === "exterior") return maskReady(scene.mascara) ? [] : scene.hotspots;
+    if (scene.tipo === "exterior") return disp && maskReady(scene.mascara) ? [] : scene.hotspots;
     return [];
   }
 
@@ -404,6 +422,14 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       if (current.length >= 3) return current;
       return [...current, id];
     });
+  }
+
+  function setDisponibilidad(on: boolean) {
+    setDisp(on);
+    const url = new URL(window.location.href);
+    if (on) url.searchParams.set("disp", "1");
+    else url.searchParams.delete("disp");
+    history.replaceState(window.history.state ?? { showroom: 1 }, "", url);
   }
 
   function pushLocation(loc: { escena?: string; planta?: string; unidad?: string }, mode: "push" | "replace" = "push") {
@@ -534,7 +560,8 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   }
 
   const image = !entered ? cover?.imagen_url ?? data.facade : phase === "planta" ? floor?.plano ?? scene?.imagen_url ?? data.facade : scene?.imagen_url ?? data.facade;
-  const cinematic = !entered || scene?.tipo === "barrio";
+  const fitCover = phase !== "planta" && scene?.tipo !== "barrio" && scene?.tipo !== "masterplan";
+  const veils = disp && phase === "escena" && scene?.tipo === "exterior" && !bridge && !playing;
   const tower = phase === "planta"
     ? data.buildings.find((item) => item.floors.some((floorItem) => floorItem.id === floorId)) ?? building
     : building;
@@ -546,7 +573,9 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       <Stage
         stageRef={stageRef}
         src={image}
-        cover={cinematic}
+        cover={fitCover}
+        focus={{ x: 0.49, y: 0.48 }}
+        shift={coverShift}
         zoom={phase === "planta" ? zoom : 1}
         pan={phase === "planta" ? pan : { x: 0, y: 0 }}
         video={bridge ?? (playing && videos.current ? videos.current : null)}
@@ -557,7 +586,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         }}
         onPointerDown={(event) => {
           moved.current = false;
-          if (phase === "escena" && entered && !bridge) swipe.current = { x: event.clientX, y: event.clientY, lx: event.clientX, ly: event.clientY };
+          if (phase === "escena" && entered && !bridge) swipe.current = { x: event.clientX, y: event.clientY, lx: event.clientX, ly: event.clientY, shift: coverShift };
           if (phase !== "planta" || zoom === 1) return;
           drag.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y };
         }}
@@ -567,7 +596,11 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
             swipe.current.ly = event.clientY;
             const dx = swipe.current.lx - swipe.current.x;
             const dy = swipe.current.ly - swipe.current.y;
-            if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+            const portrait = window.matchMedia("(max-width: 767px)").matches;
+            if (portrait && fitCover) {
+              setCoverShift(swipe.current.shift + dx);
+              if (Math.abs(dx) > 8) moved.current = true;
+            } else if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.4) {
               swipe.current = null;
               moved.current = true;
               spin(dx < 0 ? 1 : -1);
@@ -584,6 +617,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           const start = swipe.current;
           swipe.current = null;
           if (!start || phase !== "escena" || bridge) return;
+          if (window.matchMedia("(max-width: 767px)").matches) return;
           const lost = event.type === "pointercancel" || event.type === "pointerleave";
           const endX = lost ? start.lx : event.clientX;
           const endY = lost ? start.ly : event.clientY;
@@ -599,7 +633,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           event.preventDefault();
           setZoom((value) => Math.min(4, Math.max(1, value + (event.deltaY < 0 ? 0.2 : -0.2))));
         }}
-        veil={phase === "escena" && !bridge && !playing && scene && maskReady(scene.mascara) ? (
+        veil={veils && scene && maskReady(scene.mascara) ? (
           <FacadeVeil
             mask={scene.mascara}
             units={data.units}
@@ -629,7 +663,8 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           const exterior = phase === "escena" && !aerial;
           const hovered = hoverId === overlay.id;
           const [cx, cy] = centroid(overlay.puntos);
-          const fillOpacity = aerial ? 0.01 : exterior ? (hovered ? 0.62 : on ? 0.35 : 0.08) : on ? (selected ? 0.55 : 0.34) : 0.06;
+          const fillOpacity = aerial ? 0.01 : exterior ? (veils ? (hovered ? 0.62 : on ? 0.35 : 0.08) : 0) : on ? (selected ? 0.55 : 0.34) : 0.06;
+          const outline = exterior && hovered && !veils;
           return (
             <g
               key={overlay.id}
@@ -654,8 +689,8 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
                 points={overlay.puntos.map((point) => point.join(",")).join(" ")}
                 fill={aerial ? "#c4a574" : color}
                 fillOpacity={fillOpacity}
-                stroke={exterior ? "transparent" : aerial ? "transparent" : "#fff"}
-                strokeWidth={exterior ? 0 : selected ? 0.008 : 0.003}
+                stroke={outline ? "#ffffff" : exterior ? "transparent" : aerial ? "transparent" : "#fff"}
+                strokeWidth={outline ? 0.0035 : exterior ? 0 : selected ? 0.008 : 0.003}
                 style={exterior ? { transition: "fill-opacity 180ms ease" } : undefined}
               />
               {aerial && (
@@ -739,12 +774,23 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       {entered && phase === "escena" && walk.length > 1 && (
         <>
           <button type="button" aria-label="Girar a la izquierda" className="spin-btn absolute left-4 top-1/2 z-30 -translate-y-1/2" onClick={() => spin(-1)}>‹</button>
-          <button type="button" aria-label="Girar a la derecha" className="spin-btn absolute right-20 top-1/2 z-30 -translate-y-1/2" onClick={() => spin(1)}>›</button>
+          <button type="button" aria-label="Girar a la derecha" className="spin-btn absolute right-4 top-1/2 z-30 -translate-y-1/2 md:right-20" onClick={() => spin(1)}>›</button>
         </>
       )}
 
+      {showRail && tower && floorsOpen && (
+        <div className="absolute inset-x-3 bottom-24 z-20 flex gap-1 overflow-x-auto rounded-2xl bg-[#12110f]/80 px-2 py-2 md:hidden" data-testid="floor-rail-mobile">
+          {tower.floors.map((item) => (
+            <button key={item.id} type="button" className="grid min-w-11 place-items-center rounded-full px-2 py-1 text-white" onClick={() => { setFloorsOpen(false); openFloor(item.id, phase === "planta" ? "replace" : "push"); }}>
+              <span className="text-sm font-semibold">{floorMark(item.nombre, item.numero)}</span>
+              <span className="text-[10px] text-white/75">{item.libres}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {showRail && tower && (
-        <aside className="rail absolute right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-0.5 rounded-full px-1.5 py-2" data-testid="floor-rail">
+        <aside className="rail absolute right-4 top-1/2 z-20 hidden -translate-y-1/2 flex-col gap-0.5 rounded-full px-1.5 py-2 md:flex" data-testid="floor-rail">
           {tower.floors.map((item) => {
             const current = phase === "planta" && item.id === floorId;
             return (
@@ -764,7 +810,14 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       )}
 
       {entered && (
-        <div className="context absolute inset-x-0 bottom-6 z-20 hidden justify-center gap-2 md:flex">
+        <div className="context absolute inset-x-0 bottom-4 z-20 flex flex-wrap justify-center gap-2 px-3 md:bottom-6">
+          <button type="button" data-testid="disponibilidad" aria-pressed={disp} className={disp ? "disp on" : "disp"} onClick={() => setDisponibilidad(!disp)}>
+            <span className="dots" aria-hidden="true"><i /><i /><i /></span>
+            Disponibilidad
+          </button>
+          {showRail && (
+            <button type="button" className="md:hidden" onClick={() => setFloorsOpen((open) => !open)}>Pisos</button>
+          )}
           {walk.some((item) => item.tipo === "aereo") && (
             <button type="button" onClick={() => { const index = walk.findIndex((item) => item.tipo === "aereo"); if (index >= 0) { setSceneIndex(index); setPhase("escena"); } }}>Vista aérea</button>
           )}
@@ -778,7 +831,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         </div>
       )}
 
-      {entered && (phase === "planta" || scene?.tipo === "exterior" || scene?.tipo === "masterplan") && (
+      {entered && (phase === "planta" || scene?.tipo === "masterplan" || veils) && (
         <ul className="legend" data-testid="legend">
           {(["disponible", "reservada", "vendida", "pausa"] as const).map((estado) => (
             <li key={estado}><i style={{ background: STATUS_COLOR[estado] }} />{STATUS_LABEL[estado]}</li>
@@ -833,6 +886,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
             ...(data.sections.length ? [["secciones", "Secciones"] as [string, string]] : []),
             ...(data.project.pasos.length ? [["pasos", "Cómo se paga"] as [string, string]] : []),
             ...(data.project.brochure ? [["brochure", "Brochure"] as [string, string]] : []),
+            ["disponibilidad", disp ? "Ocultar disponibilidad" : "Disponibilidad"] as [string, string],
           ]}
           onClose={() => setSheet(null)}
           onPick={(action) => {
@@ -867,6 +921,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
             if (action === "secciones") setSheet("secciones");
             if (action === "pasos") setSheet("pasos");
             if (action === "brochure" && data.project.brochure) window.open(data.project.brochure, "_blank", "noopener");
+            if (action === "disponibilidad") setDisponibilidad(!disp);
             if (action === "lite") {
               const next = !lite;
               setLite(next);
@@ -885,7 +940,8 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         <Drawer title={sheetTitle(sheet)} onClose={() => setSheet(null)}>
           {sheet === "filtros" && (
             <div className="space-y-3 text-sm text-[#1c1915]">
-              <p>{matches.length} coinciden en el edificio. Las demás quedan atenuadas.</p>
+              <p>{veils ? `${matches.length} coinciden en el edificio. Las demás quedan atenuadas.` : "La fachada está limpia. Activá Disponibilidad para ver el filtro pintado sobre los departamentos."}</p>
+              {!disp && <button type="button" className="rounded-full bg-[#1c1915] px-3 py-1 text-white" onClick={() => setDisponibilidad(true)}>Ver disponibilidad</button>}
               <Select label="Estado" value={filters.estado} onChange={(estado) => setFilters({ ...filters, estado })} options={[["todos", "Todos"], ["disponible", "Disponible"], ["reservada", "Reservada"], ["vendida", "Vendida"], ["pausa", "En pausa"], ["bloqueada", "Bloqueada"], ["consultar", "Consultar"]]} />
               <Select label="Ambientes" value={filters.ambientes} onChange={(ambientes) => setFilters({ ...filters, ambientes })} options={[["todos", "Todos"], ...data.filters.ambientes.map((n) => [String(n), String(n)] as [string, string])]} />
               <Select label="Orientación" value={filters.orientacion} onChange={(orientacion) => setFilters({ ...filters, orientacion })} options={[["todas", "Todas"], ...data.filters.orientaciones.map((n) => [n, n] as [string, string])]} />
@@ -1066,11 +1122,13 @@ function HoverTip({ tip, overlays, units }: { tip: { id: string; x: number; y: n
 function Stage({
   src,
   cover,
+  focus = { x: 0.5, y: 0.5 },
+  shift = 0,
   zoom,
   pan,
-        video,
-        poster,
-        children,
+  video,
+  poster,
+  children,
   veil,
   stageRef,
   onVideoDone,
@@ -1081,6 +1139,8 @@ function Stage({
 }: {
   src: string;
   cover: boolean;
+  focus?: { x: number; y: number };
+  shift?: number;
   zoom: number;
   pan: { x: number; y: number };
   video: string | null;
@@ -1118,11 +1178,11 @@ function Stage({
     node.addEventListener("wheel", listener, { passive: false });
     return () => node.removeEventListener("wheel", listener);
   }, [onWheel, stageRef]);
-  const frame = cover ? { left: 0, top: 0, width: box.w, height: box.h } : contain(box.w, box.h, natural.w, natural.h);
+  const frame = cover ? coverFrame(box.w, box.h, natural.w, natural.h, focus.x, focus.y, shift) : contain(box.w, box.h, natural.w, natural.h);
   return (
     <div
       ref={stageRef}
-      className="absolute inset-0 touch-none"
+      className="absolute inset-0 touch-none overflow-hidden"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

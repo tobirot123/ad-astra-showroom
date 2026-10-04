@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { STATUS_COLOR } from "@/lib/domain/format";
 import { can } from "@/lib/domain/permissions";
 import type { Overlay } from "@/lib/domain/types";
+import { FachadaGridPanel } from "@/components/admin/fachada-grid-panel";
 import { MaskPanel } from "@/components/admin/mask-panel";
 import { useAdmin } from "@/components/admin/provider";
 
@@ -243,7 +244,12 @@ export function ZonesScreen() {
               </div>
             </div>
           )}
-          {surface.contenedor === "scene" && surface.link === "unit" && <MaskPanel viewpointId={surface.contenedorId} units={units} />}
+          {surface.contenedor === "scene" && surface.link === "unit" && (
+            <>
+              <FachadaGridPanel viewpointId={surface.contenedorId} image={surface.image} units={units} floors={data.floors} />
+              <MaskPanel viewpointId={surface.contenedorId} units={units} />
+            </>
+          )}
           <ul className="max-h-[520px] space-y-2 overflow-auto">
             {zones.map((overlay) => (
               <li key={overlay.id} className={`flex items-center justify-between rounded-2xl border px-3 py-2 text-sm ${selected === overlay.id ? "border-[#1c1915] bg-white" : "border-[#e4d9c8] bg-white/70"}`}>

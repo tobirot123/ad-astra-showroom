@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
+import { POL_CARAS } from "@/lib/domain/fachada-grilla";
 import { buildSeed } from "@/lib/demo/seed";
 import { colorDistance, mapIdColors, maskReady, quantizeHex, referenceColor } from "@/lib/domain/facade-mask";
 import { readIdPassColors } from "@/lib/media/id-pass";
@@ -8,9 +9,9 @@ import { buildShowroom } from "@/lib/services/present";
 import { ServiceError } from "@/lib/domain/types";
 
 const BOUNDS: Record<string, { x0: number; x1: number; y0: number; y1: number }> = {
-  "360°": { x0: 0.36, x1: 0.57, y0: 0.22, y1: 0.7 },
-  "90°": { x0: 0.34, x1: 0.63, y0: 0.24, y1: 0.71 },
-  "255°": { x0: 0.34, x1: 0.59, y0: 0.25, y1: 0.72 },
+  "360°": { x0: 0.38, x1: 0.6, y0: 0.3, y1: 0.78 },
+  "90°": { x0: 0.37, x1: 0.53, y0: 0.3, y1: 0.8 },
+  "255°": { x0: 0.36, x1: 0.6, y0: 0.27, y1: 0.8 },
 };
 
 describe("máscaras de fachada", () => {
@@ -18,9 +19,9 @@ describe("máscaras de fachada", () => {
     const data = buildSeed(new Date("2026-10-02T15:00:00.000Z"));
     const showroom = buildShowroom(data, "pol");
     const hidden: Record<string, string[]> = {
-      "360°": ["Sur", "Sur-Este", "Sur-Oeste", "Norte-Oeste"],
-      "90°": ["Norte", "Norte-Oeste"],
-      "255°": ["Sur", "Sur-Este", "Sur-Oeste", "Este"],
+      "360°": ["Sur", "Sur-Este", "Sur-Oeste"],
+      "90°": ["Norte-Oeste"],
+      "255°": [],
     };
     for (const [nombre, box] of Object.entries(BOUNDS)) {
       const scene = showroom?.scenes.find((item) => item.nombre === nombre);
@@ -36,6 +37,21 @@ describe("máscaras de fachada", () => {
         }
         const unit = showroom?.units.find((item) => item.id === hotspot.vinculo_id);
         expect(hidden[nombre]).not.toContain(unit?.orientacion);
+      }
+      const lows = (scene?.hotspots ?? []).flatMap((hotspot) => hotspot.puntos.map((point) => point[1]));
+      expect(Math.min(...lows)).toBeGreaterThan(0.28);
+      expect(Math.max(...lows)).toBeGreaterThan(0.7);
+    }
+  });
+
+  it("inclina cada cara para seguir las losas", () => {
+    for (const caras of Object.values(POL_CARAS)) {
+      expect(caras.length).toBeGreaterThan(0);
+      for (const cara of caras) {
+        const [topLeft, topRight, bottomRight, bottomLeft] = cara.esquinas;
+        expect(Math.abs(topLeft[1] - topRight[1])).toBeGreaterThan(0.012);
+        expect(Math.abs(bottomLeft[1] - bottomRight[1])).toBeGreaterThan(0.012);
+        expect(cara.pisos[0]).toBeGreaterThanOrEqual(cara.pisos.at(-1) ?? 0);
       }
     }
   });

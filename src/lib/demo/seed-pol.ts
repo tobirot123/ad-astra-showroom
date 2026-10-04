@@ -1,5 +1,5 @@
 import pol from "@/lib/demo/pol-data.json";
-import { exteriorCells } from "@/lib/demo/pol-faces";
+import { exteriorCells, POL_CARAS } from "@/lib/demo/pol-faces";
 import { distanceMeters } from "@/lib/domain/geo";
 import { seedId } from "@/lib/domain/ids";
 import { VISTA_POR_ORIENTACION } from "@/lib/domain/vista";
@@ -380,6 +380,10 @@ export function applyPol(db: Database, now: Date) {
   }
 
   const sceneOfAngle: Record<string, string> = { "360": seedId(7101), "90": seedId(7102), "255": seedId(7103) };
+  project.settings.fachadas = Object.entries(POL_CARAS).map(([angulo, caras]) => ({
+    viewpoint_id: sceneOfAngle[angulo] ?? "",
+    caras,
+  }));
   for (const cell of exteriorCells(pol.units)) {
     const unitId = unitIds.get(cell.codigo);
     const sceneId = sceneOfAngle[cell.angulo];

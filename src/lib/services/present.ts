@@ -1,10 +1,11 @@
 import { computeMetrics, deltaPct, type MetricsSnapshot } from "@/lib/domain/metrics";
 import { can, canSeeLead } from "@/lib/domain/permissions";
-import type { Actor, Database, Unit } from "@/lib/domain/types";
+import type { Actor, Database, Project, Unit } from "@/lib/domain/types";
 import { cashPrice, financedQuote, hoursLeftLabel, pendingBadge, publicStatus } from "@/lib/services/engine";
 import { floorKey } from "@/lib/domain/showroom-flow";
 import { withEffectiveAreas } from "@/lib/domain/units";
 import { encuadreVista, vistaPorOrientacion } from "@/lib/domain/vista";
+import { celdasDeGrilla, plantaDePiso } from "@/lib/domain/fachada-grilla";
 
 function mediaUrl(db: Database, mediaId: string | undefined): string | null {
   if (!mediaId) return null;
@@ -21,6 +22,39 @@ function urlsFor(
     .sort((a, b) => a.orden - b.orden)
     .map((link) => mediaUrl(db, link.media_id))
     .filter((url): url is string => Boolean(url));
+}
+
+function hotspotsDeFachada(db: Database, project: Project, sceneId: string) {
+  const grilla = project.settings.fachadas?.find((item) => item.viewpoint_id === sceneId);
+  if (!grilla?.caras.length) return null;
+  const floors = db.floors.filter((floor) => floor.project_id === project.id);
+  const units = db.units
+    .filter((unit) => unit.project_id === project.id)
+    .map((unit) => {
+      const floor = floors.find((item) => item.id === unit.floor_id);
+      return {
+        id: unit.id,
+        codigo: unit.codigo,
+        planta: plantaDePiso(floor?.numero ?? -99),
+        tipo: unit.tipo,
+        orientacion: unit.orientacion,
+      };
+    });
+  const cells = celdasDeGrilla(grilla.caras, units);
+  const hotspots = cells.flatMap((cell, index) => {
+    const unit = units.find((item) => item.codigo === cell.codigo);
+    if (!unit) return [];
+    return [{
+      id: `fachada-${sceneId}-${cell.codigo}-${index}`,
+      contenedor: "scene" as const,
+      contenedor_id: sceneId,
+      puntos: cell.puntos,
+      vinculo_tipo: "unit" as const,
+      vinculo_id: unit.id,
+      etiqueta: cell.codigo,
+    }];
+  });
+  return hotspots.length ? hotspots : null;
 }
 
 export function buildShowroom(db: Database, slug: string) {
@@ -134,7 +168,7 @@ export function buildShowroom(db: Database, slug: string) {
         transicion_url: parada?.transicion_url ?? null,
         reversa_url: parada?.reversa_url ?? null,
         vuelo_url: parada?.vuelo_url ?? null,
-        hotspots: publishedOverlays.filter((overlay) => overlay.contenedor === "scene" && overlay.contenedor_id === scene.id),
+        hotspots: hotspotsDeFachada(db, project, scene.id) ?? publishedOverlays.filter((overlay) => overlay.contenedor === "scene" && overlay.contenedor_id === scene.id),
         mascara: project.settings.mascaras?.find((item) => item.viewpoint_id === scene.id) ?? null,
       };
     });

@@ -27,6 +27,8 @@ import type {
   NotificationRow,
   Overlay,
   FacadeMask,
+  FachadaCara,
+  FachadaGrilla,
   PointOfInterest,
   Project,
   RequestTipo,
@@ -1280,6 +1282,44 @@ export function saveFacadeMask(
   logChange(db, {
     project_id: project.id, change_set_id: null, user_id: actor.id, requested_by: null, request_id: null,
     entidad: "project", entidad_id: project.id, campo: `mascara:${viewpointId}`, valor_anterior: previous, valor_nuevo: next, origen: "edit",
+  }, now);
+  return noResult();
+}
+
+export function saveFachadas(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  viewpointId: string,
+  caras: FachadaCara[],
+  now: Date,
+): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "edit_overlays");
+  const scene = db.viewpoints.find((item) => item.id === viewpointId && item.project_id === projectId);
+  if (!scene) throw new ServiceError("No encontramos esa parada.", 404);
+  const clean = caras.map((cara, index) => {
+    if (!Array.isArray(cara.esquinas) || cara.esquinas.length !== 4) throw new ServiceError("Cada cara tiene cuatro esquinas.");
+    const esquinas = cara.esquinas.map((point) => {
+      if (!Array.isArray(point) || point.length < 2) throw new ServiceError("Una esquina está incompleta.");
+      const x = Number(point[0]);
+      const y = Number(point[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) throw new ServiceError("Las esquinas van de 0 a 1.");
+      return [Math.round(x * 10000) / 10000, Math.round(y * 10000) / 10000] as [number, number];
+    }) as FachadaCara["esquinas"];
+    const pisos = (cara.pisos ?? []).map((level) => Number(level)).filter((level) => Number.isInteger(level));
+    const orientaciones = (cara.orientaciones ?? []).map((item) => String(item).trim()).filter(Boolean);
+    if (!pisos.length || !orientaciones.length) throw new ServiceError("Cada cara necesita pisos y orientaciones.");
+    return { id: String(cara.id || `${viewpointId}-${index}`), esquinas, pisos, orientaciones };
+  });
+  const previous = project.settings.fachadas ?? [];
+  const next: FachadaGrilla[] = previous.filter((item) => item.viewpoint_id !== viewpointId);
+  if (clean.length) next.push({ viewpoint_id: viewpointId, caras: clean });
+  project.settings = { ...project.settings, fachadas: next };
+  project.updated_at = now.toISOString();
+  logChange(db, {
+    project_id: project.id, change_set_id: null, user_id: actor.id, requested_by: null, request_id: null,
+    entidad: "project", entidad_id: project.id, campo: `fachadas:${viewpointId}`, valor_anterior: previous, valor_nuevo: next, origen: "edit",
   }, now);
   return noResult();
 }

@@ -59,6 +59,49 @@
   transition: transform 180ms ease;
 }
 
+.showroom .context button.disp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(18, 17, 15, 0.78);
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.showroom .context button.disp.on {
+  background: #fff;
+  color: var(--ink);
+}
+
+.showroom .context button.disp .dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.showroom .context button.disp .dots i {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 999px;
+}
+
+.showroom .context button.disp .dots i:nth-child(1) { background: #1f8a5b; }
+.showroom .context button.disp .dots i:nth-child(2) { background: #d6a21e; }
+.showroom .context button.disp .dots i:nth-child(3) { background: #c4473a; }
+
+@media (max-width: 767px) {
+  .showroom .context button,
+  .showroom .context a {
+    padding: 0.55rem 0.8rem;
+    font-size: 0.75rem;
+  }
+
+  .showroom .legend {
+    bottom: 4.6rem;
+  }
+}
+
 .showroom .enter {
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
   transition: transform 200ms ease;

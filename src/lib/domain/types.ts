@@ -1,6 +1,8 @@
 import type { FacadeMask } from "@/lib/domain/facade-mask";
+import type { FachadaGrilla } from "@/lib/domain/fachada-grilla";
 
 export type { FacadeMask } from "@/lib/domain/facade-mask";
+export type { FachadaGrilla, FachadaCara } from "@/lib/domain/fachada-grilla";
 
 export type Role = "superadmin" | "org_admin" | "seller" | "viewer";
 
@@ -130,6 +132,8 @@ export interface ProjectSettings {
    * en lugar de los polígonos de esa escena.
    */
   mascaras?: FacadeMask[];
+  /** Cuatro esquinas y la división pisos × vanos de cada fachada visible. */
+  fachadas?: FachadaGrilla[];
 }
 
 export interface ProjectContact {
