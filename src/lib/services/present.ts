@@ -148,6 +148,7 @@ export function buildShowroom(db: Database, slug: string) {
         acabados: mediaOf("acabado"),
         videos: mediaOf("video"),
         vista_url: vistaUrl,
+        vista_propia: Boolean(vistaPropia),
         vista_encuadre: encuadreVista(floor?.numero ?? 0, Boolean(vistaPropia)),
         quote: estado === "consultar" ? null : financedQuote(db, unit),
         polygon: overlay?.puntos ?? null,

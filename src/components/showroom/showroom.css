@@ -105,12 +105,14 @@
   }
 
   .showroom .legend {
-    bottom: 3.4rem;
-    max-width: calc(100% - 1.5rem);
+    left: 4.6rem;
+    bottom: 9rem;
+    max-width: calc(100% - 6.2rem);
   }
 
   .showroom .legend-pop {
-    bottom: 3.6rem;
+    left: 4.6rem;
+    bottom: 9.2rem;
   }
 }
 
@@ -121,13 +123,13 @@
 
 .showroom .legend {
   position: absolute;
-  left: 1rem;
+  left: 4.6rem;
   bottom: 5.75rem;
   z-index: 20;
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
-  max-width: min(28rem, calc(100% - 6rem));
+  max-width: min(28rem, calc(100% - 6.5rem));
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 999px;
   background: rgba(18, 17, 15, 0.5);
@@ -209,6 +211,10 @@
   border-color: transparent;
   background: var(--accent);
   color: var(--ink);
+}
+
+.showroom:has(.unit-sheet) .cookie {
+  display: none;
 }
 
 .showroom .cookie {
@@ -380,6 +386,7 @@
 }
 
 .showroom .pill {
+  min-height: 2.5rem;
   border: 0;
   border-radius: 999px;
   background: white;
@@ -481,6 +488,10 @@
 }
 
 .showroom .outline-pill {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
   border: 1px solid #e4ddd4;
   border-radius: 999px;
   background: white;
@@ -491,6 +502,7 @@
 
 .showroom .enter-btn {
   width: 100%;
+  min-height: 2.75rem;
   border-radius: 999px;
   background: var(--accent);
   padding: 0.62rem 1rem;
@@ -585,8 +597,14 @@
 
 .showroom .dock-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
+}
+
+.showroom .dock-row .round,
+.showroom .dock-row .outline-pill {
+  flex: 0 0 auto;
 }
 
 .showroom .dock .ask {
@@ -677,14 +695,58 @@
 }
 
 .showroom .loc-thumb {
-  position: absolute;
-  right: 1rem;
-  bottom: 1rem;
-  width: 7.2rem;
+  position: relative;
+  display: block;
+  width: 100%;
+  margin-top: 0.85rem;
   overflow: hidden;
+  border: 1px solid #ece7e1;
   border-radius: 0.8rem;
-  background: white;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+  background: #f6f1ea;
+  text-align: left;
+}
+
+.showroom .loc-map {
+  position: relative;
+  height: 7.5rem;
+}
+
+.showroom .sheet-hero {
+  position: relative;
+  min-height: 3.4rem;
+  padding: 0.55rem 0.7rem 0;
+}
+
+.showroom .sheet-close {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  z-index: 3;
+}
+
+.showroom .hero-plan {
+  display: block;
+  width: 100%;
+  height: 9rem;
+  border-radius: 0.7rem;
+  background: #f6f1ea;
+  object-fit: contain;
+}
+
+.showroom .vista-caption {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  z-index: 2;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(18, 17, 15, 0.72);
+  padding: 0.4rem 0.85rem;
+  color: white;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 .showroom .full-stage {
@@ -869,18 +931,35 @@
     min-height: 220px;
   }
 
+  .showroom .chrome.with-unit {
+    display: none;
+  }
+
   .showroom .sheet-hero {
     height: 0;
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
   }
 
   .showroom .sheet-hero img {
     display: none;
   }
 
-  .showroom .sheet-hero .round {
+  .showroom .sheet-close {
     position: fixed;
-    top: 0.8rem;
-    left: 0.8rem;
-    z-index: 40;
+    top: 0.75rem;
+    right: 0.75rem;
+    left: auto;
+    z-index: 60;
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .showroom .unit-main > .pill {
+    top: 0.75rem;
+    right: auto;
+    left: 0.75rem;
+    min-height: 2.5rem;
   }
 }

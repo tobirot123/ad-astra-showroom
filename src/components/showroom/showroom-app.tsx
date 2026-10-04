@@ -1086,7 +1086,11 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           fallback={data.facade}
           plantaImagen={data.buildings.flatMap((item) => item.floors).find((item) => item.id === active.floor_id)?.plano ?? null}
           footprint={data.overlays.find((overlay) => overlay.contenedor === "floor" && overlay.vinculo_id === active.id)?.puntos ?? null}
-          vistaPoints={data.scenes.find((item) => item.imagen_url === active.vista_url)?.hotspots.find((hotspot) => hotspot.vinculo_id === active.id)?.puntos ?? null}
+          vistaSrc={active.vista_propia ? active.vista_url : (data.scenes.find((item) => item.hotspots.some((hotspot) => hotspot.vinculo_id === active.id))?.imagen_url ?? active.vista_url)}
+          vistaPoints={(active.vista_propia
+            ? data.scenes.find((item) => item.imagen_url === active.vista_url)
+            : data.scenes.find((item) => item.hotspots.some((hotspot) => hotspot.vinculo_id === active.id)))
+            ?.hotspots.find((hotspot) => hotspot.vinculo_id === active.id)?.puntos ?? null}
           sent={sent}
           sending={sending}
           error={error}
@@ -1664,7 +1668,9 @@ function UnitPanel({
     setNote("");
   }, [unit.id, plans]);
   const plan = plans.find((item) => item.id === planId) ?? plans[0];
-  const shown = ficha.precio && unit.precio != null && plan ? showQuote(unit.precio, plan, project.usdArs, project.cac) : null;
+  const available = unit.estado === "disponible";
+  const showPrice = available && ficha.precio && unit.mostrar_precio && unit.precio != null;
+  const shown = showPrice && plan ? showQuote(unit.precio as number, plan, project.usdArs, project.cac) : null;
 
   async function downloadQuote() {
     if (!plan) return;
@@ -1742,7 +1748,8 @@ function UnitPanel({
             <p className="mt-2 rounded-2xl bg-[#f4efe6] px-3 py-6 text-sm text-[#6b6258]">Esta unidad todavía no tiene una vista cargada.</p>
           )}
         </div>
-        <p className="font-serif text-3xl">{ficha.precio && unit.mostrar_precio && unit.precio != null ? formatUsd(unit.precio) : "Consultar"}</p>
+        {unit.estado !== "disponible" && <p className="text-sm text-[#8a8178]">Esta unidad no está disponible</p>}
+        {showPrice && <p className="font-serif text-3xl">{formatUsd(unit.precio as number)}</p>}
         <dl className="grid grid-cols-2 gap-2 text-sm">
           {unit.m2_cubiertos != null && <div><dt className="text-[#6b6258]">Cubiertos</dt><dd>{formatM2(unit.m2_cubiertos)} m²</dd></div>}
           {unit.m2_totales != null && <div><dt className="text-[#6b6258]">Totales</dt><dd>{formatM2(unit.m2_totales)} m²</dd></div>}
@@ -1786,7 +1793,7 @@ function UnitPanel({
           {unit.acabados.length > 0 && <button type="button" className="chip" onClick={onAcabados}>Acabados</button>}
           <button type="button" className="chip" onClick={onCompare}>{compared ? "En el comparador" : "Comparar"}</button>
           {ficha.compartir && <button type="button" className="chip" onClick={onShare}>Compartir</button>}
-          {ficha.pdf && <a className="chip" href={`/api/public/ficha?slug=${project.slug}&codigo=${encodeURIComponent(unit.codigo)}`} target="_blank" rel="noreferrer">Ficha PDF</a>}
+          {available && ficha.pdf && <a className="chip" href={`/api/public/ficha?slug=${project.slug}&codigo=${encodeURIComponent(unit.codigo)}`} target="_blank" rel="noreferrer">Ficha PDF</a>}
         </div>
         {unit.plano && photos[0] !== unit.plano && (
           // eslint-disable-next-line @next/next/no-img-element

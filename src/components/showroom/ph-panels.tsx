@@ -64,7 +64,7 @@ export function HoverCard({
         <span>◈ {unit.banos ?? "—"}</span>
       </div>
       <div className="mt-4 flex gap-2">
-        <button type="button" className="outline-pill flex-1" onClick={onEnter}>{price}</button>
+        <button type="button" className="outline-pill flex-1" onClick={onEnter}>{unit.estado === "disponible" ? price : "No disponible"}</button>
         {unit.tour && <button type="button" className="outline-pill flex-1" onClick={onTour}>Tour 360°</button>}
       </div>
       <button type="button" className="enter-btn mt-3" onClick={onEnter}>Ingresar</button>
@@ -471,10 +471,10 @@ export function UnitSheet({
   setTab,
   project,
   plans,
-  fallback,
   plantaImagen,
   footprint,
   vistaPoints = null,
+  vistaSrc = null,
   sent,
   sending,
   error,
@@ -494,6 +494,7 @@ export function UnitSheet({
   plantaImagen: string | null;
   footprint: [number, number][] | null;
   vistaPoints?: [number, number][] | null;
+  vistaSrc?: string | null;
   sent: boolean;
   sending: boolean;
   error: string;
@@ -525,9 +526,11 @@ export function UnitSheet({
     if (next && next.id !== tab) setTab(next.id);
   }, [unit, tab, plantaImagen, setTab]);
   const plan = plans.find((item) => item.id === planId) ?? plans[0];
-  const shown = ficha.precio && unit.precio != null && plan ? showQuote(unit.precio, plan, project.usdArs, project.cac) : null;
+  const available = unit.estado === "disponible";
+  const showPrice = available && ficha.precio && unit.mostrar_precio && unit.precio != null;
+  const shown = showPrice && plan ? showQuote(unit.precio as number, plan, project.usdArs, project.cac) : null;
   const tone = statusTone(unit.estado);
-  const hero = unit.galeria[0] ?? unit.planta3d ?? unit.vista_url ?? unit.plano ?? fallback;
+  const vistaFallback = unit.vista_propia === false;
   const blocked = unit.estado === "vendida" || unit.estado === "reservada" || unit.estado === "pausa" || unit.estado === "bloqueada";
   const balcon = unit.m2_totales != null && unit.m2_cubiertos != null ? Math.max(0, unit.m2_totales - unit.m2_cubiertos) : null;
   const gallery = unit.galeria.length ? unit.galeria : unit.renders.filter((url) => url !== unit.planta3d);
@@ -563,9 +566,11 @@ export function UnitSheet({
     <section className="unit-sheet" data-testid="unit-panel">
       <aside className="unit-side">
         <div className="sheet-hero relative">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={hero} alt="" className="h-36 w-full object-cover md:h-36" />
-          <button type="button" aria-label="Cerrar ficha" className="round absolute left-3 top-3" onClick={onClose}>×</button>
+          {unit.planta3d && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={unit.planta3d} alt={`Planta 3D de ${unit.codigo}`} className="hero-plan" />
+          )}
+          <button type="button" aria-label="Cerrar ficha" className="round sheet-close" onClick={onClose}>×</button>
         </div>
         <div className="body">
           <div className="flex items-start justify-between gap-2">
@@ -577,12 +582,15 @@ export function UnitSheet({
           </div>
           {blocked && <p className="mt-2 text-sm text-[#8a8178]">Esta unidad no está disponible</p>}
           <div className="tab-row mt-4">
-            {TABS.filter((item) => ready(unit, item.id, plantaImagen)).map((item) => (
-              <button key={item.id} type="button" className={tab === item.id ? "icon-tab on" : "icon-tab"} onClick={() => setTab(item.id)} aria-label={item.label}>
-                <span className="bubble"><TabGlyph name={item.id} /></span>
-                <span className="cap">{item.label}</span>
-              </button>
-            ))}
+            {TABS.filter((item) => ready(unit, item.id, plantaImagen)).map((item) => {
+              const label = item.id === "vistas" && vistaFallback ? "Ubicación" : item.label;
+              return (
+                <button key={item.id} type="button" className={tab === item.id ? "icon-tab on" : "icon-tab"} onClick={() => setTab(item.id)} aria-label={label}>
+                  <span className="bubble"><TabGlyph name={item.id} /></span>
+                  <span className="cap">{label}</span>
+                </button>
+              );
+            })}
           </div>
           <p className="mt-4 text-xs uppercase tracking-[0.14em] text-[#8a8178]">Características</p>
           <div className="mt-1">
@@ -593,11 +601,17 @@ export function UnitSheet({
             {unit.banos != null && <p className="spec">◈ {unit.banos} baños</p>}
             {unit.orientacion && <p className="spec">◎ Orientación {unit.orientacion}</p>}
             {unit.piso && <p className="spec">☰ {unit.piso}</p>}
-            {ficha.precio && unit.mostrar_precio && unit.precio != null && <p className="spec">{formatUsd(unit.precio)}</p>}
+            {showPrice && <p className="spec">{formatUsd(unit.precio as number)}</p>}
             {unit.custom.map((field) => (
               <p key={field.clave} className="spec">{field.nombre}: {typeof field.value === "boolean" ? (field.value ? "sí" : "no") : typeof field.value === "number" ? `${formatNumber(field.value)}${field.unidad ? ` ${field.unidad}` : ""}` : String(field.value)}</p>
             ))}
           </div>
+          {plantaImagen && (
+            <button type="button" className="loc-thumb" onClick={() => setTab("planos")}>
+              <FloorHighlight src={plantaImagen} points={footprint} codigo={unit.codigo} compact />
+              <span className="block px-2 py-1 text-center text-[10px] text-[#6b6258]">Ubicación en planta</span>
+            </button>
+          )}
           {ask && !sent && (
             <form className="mt-3 space-y-2" onSubmit={(event) => { event.preventDefault(); onLead(new FormData(event.currentTarget)); }}>
               <input name="nombre" required placeholder="Nombre" className="field" />
@@ -630,18 +644,14 @@ export function UnitSheet({
           )}
         </div>
         <div className="dock">
+          <button type="button" className="enter-btn" onClick={() => setAsk((open) => !open)}>Solicitar información</button>
           <div className="dock-row">
-            <button type="button" className="ask" onClick={() => setAsk((open) => !open)}>Solicitar información</button>
             <a className="round light" href={`mailto:${project.contacto.email}`} aria-label="Email"><MailIcon /></a>
             <a className="round light" href={`tel:${project.contacto.telefono}`} aria-label="Teléfono"><PhoneIcon /></a>
             {ficha.whatsapp && <button type="button" className="round light" onClick={onWhatsapp} aria-label="WhatsApp"><WhatsIcon /></button>}
+            {shown && <button type="button" className="outline-pill" onClick={() => setQuoteOpen((open) => !open)}>Cotizar</button>}
+            {available && ficha.pdf && <a className="outline-pill" href={`/api/public/ficha?slug=${project.slug}&codigo=${encodeURIComponent(unit.codigo)}`} target="_blank" rel="noreferrer">PDF</a>}
           </div>
-          {(shown || ficha.pdf) && (
-            <div className="dock-row">
-              {shown && <button type="button" className="outline-pill" onClick={() => setQuoteOpen((open) => !open)}>Cotizar</button>}
-              {ficha.pdf && <a className="outline-pill" href={`/api/public/ficha?slug=${project.slug}&codigo=${encodeURIComponent(unit.codigo)}`} target="_blank" rel="noreferrer">PDF</a>}
-            </div>
-          )}
         </div>
       </aside>
       <div className="unit-main">
@@ -652,15 +662,16 @@ export function UnitSheet({
             <Arrows index={photo} total={gallery.length} onChange={setPhoto} />
           </>
         )}
-        {tab === "vistas" && unit.vista_url && (
+        {tab === "vistas" && (vistaSrc || unit.vista_url) && (
           <div className="vista-frame">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={unit.vista_url} alt={unit.orientacion ? `Vista al ${unit.orientacion}` : "Vista"} className="fit" style={{ objectPosition: unit.vista_encuadre }} />
+            <img src={vistaSrc || unit.vista_url || ""} alt={vistaFallback ? "Ubicación en el edificio" : unit.orientacion ? `Vista al ${unit.orientacion}` : "Vista"} className="fit" style={{ objectPosition: unit.vista_encuadre }} />
             {vistaPoints && vistaPoints.length >= 3 && (
               <svg viewBox="0 0 1 1" preserveAspectRatio="xMidYMid meet" className="absolute inset-0 h-full w-full">
                 <polygon points={vistaPoints.map((point) => point.join(",")).join(" ")} fill="#c4a574" fillOpacity="0.45" stroke="#fff" strokeWidth="0.004" vectorEffect="non-scaling-stroke" />
               </svg>
             )}
+            {vistaFallback && <p className="vista-caption">Ubicación en el edificio</p>}
           </div>
         )}
         {tab === "planta3d" && unit.planta3d && (
@@ -680,12 +691,6 @@ export function UnitSheet({
         {tab === "recorrido" && unit.tour && <Panorama tour={unit.tour} />}
         {tab === "video" && unit.videos[0] && <video src={unit.videos[0]} controls className="fit" />}
         <button type="button" className="pill absolute right-4 top-4" onClick={onChangeFloor}>Cambiar planta</button>
-        {plantaImagen && (
-          <button type="button" className="loc-thumb" onClick={() => setTab("planos")}>
-            <FloorHighlight src={plantaImagen} points={footprint} codigo={unit.codigo} compact />
-            <span className="block px-2 py-1 text-center text-[10px] text-[#6b6258]">Ubicación en planta</span>
-          </button>
-        )}
       </div>
     </section>
   );
@@ -693,7 +698,7 @@ export function UnitSheet({
 
 function FloorHighlight({ src, points, codigo, compact = false }: { src: string; points: [number, number][] | null; codigo: string; compact?: boolean }) {
   return (
-    <div className={compact ? "relative h-16" : "relative h-full w-full"}>
+    <div className={compact ? "loc-map" : "relative h-full w-full"}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt={compact ? "" : `Planta con ${codigo}`} className={compact ? "h-full w-full object-fill" : "fit"} />
       {points && (
