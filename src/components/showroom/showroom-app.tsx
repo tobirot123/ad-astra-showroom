@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 import { PoiMap } from "@/components/maps/poi-map";
 import { FacadeVeil } from "@/components/showroom/facade-veil";
 import { maskReady } from "@/lib/domain/facade-mask";
@@ -10,12 +11,14 @@ import { travelMinutes } from "@/lib/domain/geo";
 import { poiColor, poiLabel } from "@/lib/domain/poi";
 import "./showroom.css";
 import { coverFrame, portraitCenter } from "@/lib/domain/cover-frame";
+import { AmenityStage, ContactStage, FullIcon, GalleryStage, HoverCard, MapStage, PhMenu, QrIcon, RecorridoStage, UnitSheet, VideoStage } from "@/components/showroom/ph-panels";
 import { floorKey, sceneKey, sortUnits, tourEmbed, unitMatches, videosToLoad, type FlowFilters } from "@/lib/domain/showroom-flow";
 import type { ShowroomData } from "@/lib/services/present";
 
 type Unit = ShowroomData["units"][number];
 type Overlay = ShowroomData["overlays"][number];
-type Sheet = null | "menu" | "filtros" | "galeria" | "amenities" | "mapa" | "info" | "comparar" | "tour" | "compartir" | "vista" | "acabados" | "obra" | "secciones" | "pasos";
+type Sheet = null | "menu" | "filtros" | "galeria" | "amenities" | "mapa" | "info" | "comparar" | "tour" | "compartir" | "vista" | "acabados" | "obra" | "secciones" | "pasos" | "recorridos" | "video" | "contacto";
+type UnitTab = "galeria" | "vistas" | "planta3d" | "planos" | "recorrido" | "video";
 
 const EMPTY_FILTERS: FlowFilters = {
   estado: "todos",
@@ -80,6 +83,31 @@ function floorMark(nombre: string, numero: number) {
   return String(numero);
 }
 
+function plantaLabel(nombre: string, numero: number) {
+  if (/^piso\s+\d+/i.test(nombre)) return `Planta ${numero}`;
+  return nombre;
+}
+
+function bandOf(points: [number, number][]): [number, number][] {
+  if (points.length < 4) return points;
+  const lerp = (a: [number, number], b: [number, number], t: number): [number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const topLeft = points[0]!;
+  const topRight = points[1]!;
+  const bottomRight = points[2]!;
+  const bottomLeft = points[3]!;
+  return [lerp(topLeft, bottomLeft, 0.4), lerp(topRight, bottomRight, 0.4), lerp(topRight, bottomRight, 0.58), lerp(topLeft, bottomLeft, 0.58)];
+}
+
+function tabReady(unit: Unit, tab: UnitTab, plantaImagen: string | null) {
+  if (tab === "galeria") return unit.galeria.length > 0;
+  if (tab === "vistas") return Boolean(unit.vista_url);
+  if (tab === "planta3d") return Boolean(unit.planta3d);
+  if (tab === "planos") return Boolean(unit.plano || plantaImagen);
+  if (tab === "recorrido") return Boolean(unit.tour);
+  if (tab === "video") return unit.videos.length > 0;
+  return false;
+}
+
 export function ShowroomApp({ data }: { data: ShowroomData }) {
   const walk = useMemo(() => data.scenes.filter((scene) => scene.tipo !== "portada"), [data.scenes]);
   const cover = data.scenes.find((scene) => scene.tipo === "portada") ?? walk[0];
@@ -112,6 +140,14 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const [coverShift, setCoverShift] = useState(0);
   const [floorsOpen, setFloorsOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
+  const [card, setCard] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [unitTab, setUnitTab] = useState<UnitTab>("planta3d");
+  const [filterPop, setFilterPop] = useState<null | "area" | "estado" | "dorm">(null);
+  const [dorm, setDorm] = useState("todos");
+  const [area, setArea] = useState<{ min: number; max: number } | null>(null);
+  const [qr, setQr] = useState<string | null>(null);
+  const pinned = useRef(false);
+  const cardTimer = useRef<number | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
   const swipe = useRef<{ x: number; y: number; lx: number; ly: number; shift: number } | null>(null);
@@ -123,7 +159,15 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const active = data.units.find((unit) => unit.id === unitId) ?? null;
   const videos = entered && phase === "escena" ? videosToLoad(walk, sceneIndex, lite) : { current: null, next: null };
 
-  const filtering = filters.estado !== "todos" || filters.ambientes !== "todos" || filters.orientacion !== "todas" || Boolean(filters.precioMax) || Object.values(extra).some((value) => value && value !== "todos");
+  const areaBound = useMemo(() => {
+    const values = data.units.map((unit) => unit.m2_totales).filter((value): value is number => value != null && value > 0);
+    if (!values.length) return { min: 0, max: 100 };
+    return { min: Math.min(...values), max: Math.max(...values) };
+  }, [data.units]);
+  const areaMin = area?.min ?? areaBound.min;
+  const areaMax = area?.max ?? areaBound.max;
+  const areaActive = area != null && (area.min > areaBound.min + 0.05 || area.max < areaBound.max - 0.05);
+  const filtering = filters.estado !== "todos" || filters.ambientes !== "todos" || filters.orientacion !== "todas" || Boolean(filters.precioMax) || dorm !== "todos" || areaActive || Object.values(extra).some((value) => value && value !== "todos");
 
   const matches = useMemo(() => {
     return sortUnits(data.units.filter((unit) => {
@@ -136,9 +180,11 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           if (String(Boolean(value)) !== selected) return false;
         } else if (String(value ?? "") !== selected) return false;
       }
+      if (dorm !== "todos" && String(unit.dormitorios ?? "") !== dorm) return false;
+      if (areaActive && unit.m2_totales != null && (unit.m2_totales < areaMin || unit.m2_totales > areaMax)) return false;
       return true;
     }), filters.sort);
-  }, [data.units, data.filters.fields, filters, extra]);
+  }, [data.units, data.filters.fields, filters, extra, dorm, areaActive, areaMin, areaMax]);
 
   useEffect(() => {
     const { visitor, session, fresh } = identity();
@@ -322,7 +368,41 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     return [];
   }
 
-  function onZone(overlay: Overlay) {
+  function forgetCard() {
+    if (cardTimer.current) window.clearTimeout(cardTimer.current);
+    pinned.current = false;
+    setCard(null);
+    setHoverId(null);
+  }
+
+  function holdCard(unit: Unit, x: number, y: number, pin: boolean) {
+    if (pinned.current && !pin) return;
+    if (cardTimer.current) window.clearTimeout(cardTimer.current);
+    if (pin) pinned.current = true;
+    setCard((current) => (current?.id === unit.id && !pin ? current : { id: unit.id, x, y }));
+  }
+
+  function releaseCard() {
+    if (pinned.current) return;
+    if (cardTimer.current) window.clearTimeout(cardTimer.current);
+    cardTimer.current = window.setTimeout(() => {
+      if (!pinned.current) setCard(null);
+    }, 220);
+  }
+
+  function enterUnit(unit: Unit, origen: string, tab?: UnitTab) {
+    forgetCard();
+    const plantaImagen = data.buildings.flatMap((item) => item.floors).find((item) => item.id === unit.floor_id)?.plano ?? null;
+    const order: UnitTab[] = ["planta3d", "planos", "galeria", "vistas", "recorrido", "video"];
+    const next = tab && tabReady(unit, tab, plantaImagen) ? tab : order.find((item) => tabReady(unit, item, plantaImagen)) ?? "planos";
+    setUnitTab(next);
+    setPhoto(0);
+    const onPlan = phase === "planta" || scene?.tipo === "masterplan";
+    if (onPlan) chooseUnit(unit, origen);
+    else revealUnit(unit);
+  }
+
+  function onZone(overlay: Overlay, point?: { x: number; y: number }) {
     if (moved.current || bridge) return;
     if (overlay.vinculo_tipo === "building" && overlay.vinculo_id) {
       goBuilding(overlay.vinculo_id);
@@ -331,13 +411,9 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     const unit = data.units.find((item) => item.id === overlay.vinculo_id);
     if (!unit) return;
     setTip(null);
-    setHoverId(null);
-    const onPlan = phase === "planta" || scene?.tipo === "masterplan";
-    if (onPlan) {
-      chooseUnit(unit, phase === "planta" ? "planta" : "masterplan");
-      return;
-    }
-    revealUnit(unit);
+    const x = point?.x ?? window.innerWidth / 2;
+    const y = point?.y ?? window.innerHeight / 2;
+    holdCard(unit, x, y, true);
   }
 
   function matched(unitIdValue: string | null) {
@@ -388,6 +464,16 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     const text = encodeURIComponent(`Hola, me interesa ${unit ? `la unidad ${unit.codigo} de ${data.project.nombre}` : data.project.nombre}.`);
     track("whatsapp_click", unit);
     window.open(`https://wa.me/${data.project.contacto.whatsapp}?text=${text}`, "_blank", "noopener");
+  }
+
+  async function openQr(unit?: Unit | null) {
+    const url = new URL(`/s/${data.project.slug}`, window.location.origin);
+    if (unit?.planta) url.searchParams.set("planta", unit.planta);
+    if (unit) url.searchParams.set("unidad", unit.codigo);
+    else if (floor) url.searchParams.set("planta", floor.clave);
+    else if (scene) url.searchParams.set("escena", sceneKey(scene.nombre));
+    setQr(await QRCode.toDataURL(url.toString(), { margin: 1, width: 320, color: { dark: "#1c2733", light: "#ffffff" } }));
+    setSheet("compartir");
   }
 
   async function share(unit?: Unit | null) {
@@ -556,8 +642,10 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const tower = phase === "planta"
     ? data.buildings.find((item) => item.floors.some((floorItem) => floorItem.id === floorId)) ?? building
     : building;
-  const showRail = entered && Boolean(tower && tower.floors.length > 0 && (phase === "planta" || scene?.tipo === "exterior"));
+  const showRail = entered && phase === "planta" && !active && Boolean(tower && tower.floors.length > 0);
   const polygons = zones();
+  const cardUnit = card ? data.units.find((unit) => unit.id === card.id) ?? null : null;
+  const contextText = phase === "planta" && floor ? plantaLabel(floor.nombre, floor.numero) : scene?.tipo === "aereo" || scene?.tipo === "exterior" ? "Vista aérea" : scene?.nombre ?? "";
 
   return (
     <main className="showroom relative h-[100dvh] overflow-hidden bg-[#12110f] text-white" data-testid="showroom" style={{ ["--accent" as string]: data.project.acento }}>
@@ -568,19 +656,34 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         focus={{ x: phase === "escena" ? portraitCenter(scene?.nombre) : 0.5, y: 0.48 }}
         shift={coverShift}
         clip={phase === "escena" && scene?.tipo === "exterior" ? scene.silueta ?? undefined : undefined}
-        zoom={phase === "planta" ? zoom : 1}
-        pan={phase === "planta" ? pan : { x: 0, y: 0 }}
+        zoom={zoom}
+        pan={pan}
+        soft={!entered}
+        backdrop={phase === "planta" ? scene?.imagen_url ?? data.facade : null}
         video={bridge ?? (playing && videos.current ? videos.current : null)}
         poster={image}
         onVideoDone={() => {
           if (bridge) finishBridge();
           else setPlaying(false);
         }}
+        marks={phase === "planta" ? polygons.flatMap((overlay) => {
+          const unit = overlay.vinculo_tipo === "unit" ? data.units.find((item) => item.id === overlay.vinculo_id) : undefined;
+          if (!unit) return [];
+          const [x, y] = centroid(overlay.puntos);
+          return [{ id: overlay.id, x, y, color: STATUS_COLOR[unit.estado] ?? "#1f8a5b", label: unit.codigo, dim: !matched(unit.id) }];
+        }) : []}
         onPointerDown={(event) => {
           moved.current = false;
+          const target = event.target as HTMLElement;
+          if (!target.closest("g") && !target.closest(".hover-card")) {
+            pinned.current = false;
+            setCard(null);
+          }
+          if (zoom > 1) {
+            drag.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y };
+            return;
+          }
           if (phase === "escena" && entered && !bridge) swipe.current = { x: event.clientX, y: event.clientY, lx: event.clientX, ly: event.clientY, shift: coverShift };
-          if (phase !== "planta" || zoom === 1) return;
-          drag.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y };
         }}
         onPointerMove={(event) => {
           if (swipe.current && phase === "escena" && !bridge) {
@@ -621,7 +724,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           }
         }}
         onWheel={(event) => {
-          if (phase !== "planta") return;
+          if (!entered || active) return;
           event.preventDefault();
           setZoom((value) => Math.min(4, Math.max(1, value + (event.deltaY < 0 ? 0.2 : -0.2))));
         }}
@@ -633,15 +736,16 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
             hoverId={hoverId}
             onHover={(unitId, point) => {
               setHoverId(unitId);
-              setTip(unitId && point ? { id: unitId, x: point.x, y: point.y } : null);
+              const unit = unitId ? data.units.find((item) => item.id === unitId) : undefined;
+              if (unit && point && !window.matchMedia("(pointer: coarse)").matches) holdCard(unit, point.x, point.y, false);
+              else if (!unitId) releaseCard();
             }}
             onPick={(unitId) => {
               if (moved.current) return;
               const unit = data.units.find((item) => item.id === unitId);
               if (!unit) return;
               setTip(null);
-              setHoverId(null);
-              revealUnit(unit);
+              holdCard(unit, window.innerWidth / 2, window.innerHeight * 0.42, true);
             }}
           />
         ) : null}
@@ -655,44 +759,45 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           const exterior = phase === "escena" && !aerial;
           const hovered = hoverId === overlay.id;
           const [cx, cy] = centroid(overlay.puntos);
-          const fillOpacity = aerial ? 0.01 : exterior ? (veils ? (hovered ? 0.62 : on ? 0.35 : 0.08) : 0) : on ? (selected ? 0.55 : 0.34) : 0.06;
-          const outline = exterior && hovered && !veils;
+          const fillOpacity = aerial ? 0.01 : exterior && veils ? 0 : hovered || selected ? 0.22 : 0;
           return (
             <g
               key={overlay.id}
-              onClick={(event) => { event.stopPropagation(); onZone(overlay); }}
+              onClick={(event) => { event.stopPropagation(); onZone(overlay, { x: event.clientX, y: event.clientY }); }}
               onMouseEnter={(event) => {
-                if (phase !== "escena" || overlay.vinculo_tipo !== "unit") return;
+                if (!unit) return;
                 if (window.matchMedia("(pointer: coarse)").matches) return;
                 setHoverId(overlay.id);
-                setTip({ id: overlay.id, x: event.clientX, y: event.clientY });
-              }}
-              onMouseMove={(event) => {
-                if (tip?.id !== overlay.id) return;
-                setTip({ id: overlay.id, x: event.clientX, y: event.clientY });
+                holdCard(unit, event.clientX, event.clientY, false);
               }}
               onMouseLeave={() => {
                 setHoverId((current) => (current === overlay.id ? null : current));
-                setTip((current) => (current?.id === overlay.id ? null : current));
+                releaseCard();
               }}
               className="cursor-pointer"
             >
               <polygon
                 points={overlay.puntos.map((point) => point.join(",")).join(" ")}
                 fill={aerial ? "#c4a574" : color}
-                fillOpacity={fillOpacity}
-                stroke={outline ? "#ffffff" : exterior ? "transparent" : aerial ? "transparent" : "#fff"}
-                strokeWidth={outline ? 0.0035 : exterior ? 0 : selected ? 0.008 : 0.003}
-                style={exterior ? { transition: "fill-opacity 180ms ease" } : undefined}
+                fillOpacity={on ? fillOpacity : 0.04}
+                stroke="transparent"
+                style={{ transition: "fill-opacity 180ms ease" }}
               />
+              {exterior && veils && (
+                <polygon
+                  points={bandOf(overlay.puntos).map((point) => point.join(",")).join(" ")}
+                  fill={color}
+                  fillOpacity={hovered ? 0.92 : on ? 0.78 : 0.12}
+                  stroke="transparent"
+                  style={{ transition: "fill-opacity 180ms ease" }}
+                  pointerEvents="none"
+                />
+              )}
               {aerial && (
                 <>
                   <circle cx={cx} cy={cy} r="0.028" fill="#c4a574" stroke="#fff" strokeWidth="0.006" />
                   <text x={cx} y={cy + 0.055} textAnchor="middle" fontSize="0.028" fill="#fff">{overlay.etiqueta}</text>
                 </>
-              )}
-              {unit && phase === "planta" && (
-                <text x={cx} y={cy} textAnchor="middle" fontSize="0.032" fill="#fff">{unit.codigo}</text>
               )}
             </g>
           );
@@ -712,294 +817,222 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img src={walk[(sceneIndex - 1 + walk.length) % walk.length]?.imagen_url} alt="" className="pointer-events-none absolute h-px w-px opacity-0" />
       )}
-      {tip && phase === "escena" && <HoverTip tip={tip} overlays={scene?.hotspots ?? []} units={data.units} />}
-
-      <button
-        type="button"
-        aria-label="Menú"
-        className="menu-btn absolute left-4 top-4 z-20 grid h-11 w-11 place-items-center rounded-full text-[#1c1915]"
-        onClick={() => setSheet(sheet === "menu" ? null : "menu")}
-      >
-        <span className="flex flex-col gap-1.5">
-          <span className="block h-0.5 w-5 bg-current" />
-          <span className="block h-0.5 w-5 bg-current" />
-          <span className="block h-0.5 w-5 bg-current" />
-        </span>
-      </button>
-
-      {entered && (
-        <div className="pointer-events-none absolute inset-x-0 top-5 z-10 text-center">
-          <p className="text-[11px] uppercase tracking-[0.28em] text-white/80">{phase === "planta" ? floor?.nombre : scene?.nombre}</p>
-          <p className="font-serif text-2xl drop-shadow">{data.project.nombre}</p>
-        </div>
+      {cardUnit && !active && (
+        <HoverCard
+          unit={cardUnit}
+          x={card?.x ?? 0}
+          y={card?.y ?? 0}
+          onEnter={() => enterUnit(cardUnit, phase === "planta" ? "planta" : "fachada")}
+          onTour={() => enterUnit(cardUnit, "tour", "recorrido")}
+          onKeep={() => { if (cardTimer.current) window.clearTimeout(cardTimer.current); }}
+          onLeave={releaseCard}
+        />
       )}
 
-      <div className="absolute right-4 top-4 z-20 flex gap-2">
-        <button type="button" className="glass rounded-full px-3 py-2 text-sm" onClick={() => setSheet("filtros")}>Filtros</button>
-        {compare.length > 0 && (
-          <button type="button" className="rounded-full bg-white px-3 py-2 text-sm text-[#1c1915]" onClick={() => setSheet("comparar")}>Comparar ({compare.length})</button>
-        )}
-      </div>
-
-      {!entered && (
-        <div className="absolute inset-0 z-10 grid place-items-center px-6 text-center">
-          <div>
-            {data.project.logo && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={data.project.logo} alt="" className="mx-auto mb-5 h-14 w-auto" />
-            )}
-            <p className="eyebrow">Showroom</p>
-            <h1 className="wordmark mt-3 font-serif text-6xl text-white md:text-8xl">{data.project.titulo || data.project.nombre}</h1>
-            <p className="mt-3 text-sm tracking-wide text-white/80">{data.project.direccion}</p>
-          </div>
-          <button
-            type="button"
-            data-testid="entrar"
-            className="enter absolute bottom-10 rounded-full bg-white px-12 py-3.5 text-sm tracking-[0.22em] text-[#1c1915] uppercase"
-            onClick={enter}
-          >
-            Entrar
+      <div className={`chrome absolute left-4 top-4 z-[36] ${active ? "with-unit" : ""}`}>
+        <div className="flex items-center gap-2">
+          <button type="button" aria-label="Menú" className="round accent" onClick={() => setSheet(sheet === "menu" ? null : "menu")}>
+            <span className="flex flex-col gap-1">
+              <span className="block h-0.5 w-4 bg-current" />
+              <span className="block h-0.5 w-4 bg-current" />
+              <span className="block h-0.5 w-4 bg-current" />
+            </span>
+          </button>
+          {entered && <button type="button" aria-label="Volver" className="round" onClick={stepBack}>‹</button>}
+          <button type="button" aria-label="Compartir" className="round" onClick={() => void openQr(active)}>
+            <QrIcon />
           </button>
         </div>
+        {entered && <p className="context-label">{contextText}</p>}
+      </div>
+
+      {entered && !active && (
+        <div className="absolute right-4 top-4 z-20 flex items-center gap-2">
+          {disp && phase === "escena" ? (
+            <>
+              <button type="button" className={filterPop === "area" ? "pill on" : "pill"} onClick={() => setFilterPop(filterPop === "area" ? null : "area")}>Filtrar área</button>
+              <button type="button" className={filterPop === "estado" ? "pill on" : "pill"} onClick={() => setFilterPop(filterPop === "estado" ? null : "estado")}>Filtrar disponibilidad</button>
+              <button type="button" className={filterPop === "dorm" ? "pill on" : "pill"} onClick={() => setFilterPop(filterPop === "dorm" ? null : "dorm")}>Filtrar dormitorios</button>
+            </>
+          ) : (
+            <>
+              <button type="button" className={phase === "escena" && !disp ? "pill on" : "pill"} onClick={() => { setDisponibilidad(false); const index = walk.findIndex((item) => item.tipo === "aereo" || item.tipo === "exterior"); setEntered(true); setPhase("escena"); setUnitId(null); if (index >= 0) setSceneIndex(index); }}>Vista aérea</button>
+              {building && building.floors[0] && <button type="button" className={phase === "planta" ? "pill on" : "pill"} onClick={() => { setDisponibilidad(false); goPlans(); }}>Ver plantas</button>}
+              <button type="button" className="pill" onClick={() => setSheet("galeria")}>Galería</button>
+            </>
+          )}
+          <button type="button" aria-label="Pantalla completa" className="round" onClick={() => { if (!document.fullscreenElement) void document.documentElement.requestFullscreen(); else void document.exitFullscreen(); }}>
+            <FullIcon />
+          </button>
+          {disp && phase === "escena" && filterPop === "area" && (
+            <div className="pop">
+              <p className="mb-2 text-sm font-medium">Área</p>
+              <input type="range" min={areaBound.min} max={areaBound.max} step="0.1" value={areaMin} onChange={(event) => setArea({ min: Math.min(Number(event.target.value), areaMax), max: areaMax })} className="w-full" />
+              <input type="range" min={areaBound.min} max={areaBound.max} step="0.1" value={areaMax} onChange={(event) => setArea({ min: areaMin, max: Math.max(Number(event.target.value), areaMin) })} className="mt-1 w-full" />
+              <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                <label>Mínimo
+                  <input value={areaMin.toFixed(2)} onChange={(event) => setArea({ min: Number(event.target.value) || areaBound.min, max: areaMax })} className="mt-1 w-full rounded-full border border-[#e6e0d8] px-3 py-1" />
+                  <span className="text-[#8a8178]"> m²</span>
+                </label>
+                <label>Máximo
+                  <input value={areaMax.toFixed(2)} onChange={(event) => setArea({ min: areaMin, max: Number(event.target.value) || areaBound.max })} className="mt-1 w-full rounded-full border border-[#e6e0d8] px-3 py-1" />
+                  <span className="text-[#8a8178]"> m²</span>
+                </label>
+              </div>
+            </div>
+          )}
+          {disp && phase === "escena" && filterPop === "estado" && (
+            <div className="pop">
+              {([["vendida", "Vendido"], ["reservada", "Reservado"], ["disponible", "Disponible"]] as const).map(([value, label]) => (
+                <label key={value} className="radio" onClick={() => setFilters({ ...filters, estado: filters.estado === value ? "todos" : value })}>
+                  <input type="radio" name="estado" readOnly checked={filters.estado === value} />
+                  {label}
+                </label>
+              ))}
+            </div>
+          )}
+          {disp && phase === "escena" && filterPop === "dorm" && (
+            <div className="pop">
+              {["1", "2", "3"].map((value) => (
+                <label key={value} className="radio" onClick={() => setDorm(dorm === value ? "todos" : value)}>
+                  <input type="radio" name="dorm" readOnly checked={dorm === value} />
+                  {value}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
-      {entered && phase === "escena" && walk.length > 1 && (
+      {entered && disp && phase === "escena" && !active && !filterPop && (
+        <p className="pointer-events-none absolute right-4 top-[4.6rem] z-20 rounded-lg bg-[#1c2733]/80 px-3 py-1 text-xs text-white">Disponibilidad · Departamentos</p>
+      )}
+
+      {entered && !active && phase === "escena" && walk.length > 1 && (
         <>
-          <button type="button" aria-label="Girar a la izquierda" className="spin-btn absolute left-1 top-1/2 z-30 -translate-y-1/2 md:left-4" onClick={() => spin(-1)}>‹</button>
-          <button type="button" aria-label="Girar a la derecha" className="spin-btn absolute right-1 top-1/2 z-30 -translate-y-1/2 md:right-20" onClick={() => spin(1)}>›</button>
+          <button type="button" aria-label="Girar a la izquierda" className="spin-btn absolute left-3 top-1/2 z-30 -translate-y-1/2" onClick={() => spin(-1)}>‹</button>
+          <button type="button" aria-label="Girar a la derecha" className="spin-btn absolute right-3 top-1/2 z-30 -translate-y-1/2" onClick={() => spin(1)}>›</button>
+          <span className="giro right-3">Giro 360</span>
         </>
       )}
 
-      {showRail && tower && floorsOpen && (
-        <div className="absolute inset-x-3 bottom-24 z-20 flex gap-1 overflow-x-auto rounded-2xl bg-[#12110f]/80 px-2 py-2 md:hidden" data-testid="floor-rail-mobile">
-          {tower.floors.map((item) => (
-            <button key={item.id} type="button" className="grid min-w-11 place-items-center rounded-full px-2 py-1 text-white" onClick={() => { setFloorsOpen(false); openFloor(item.id, phase === "planta" ? "replace" : "push"); }}>
-              <span className="text-sm font-semibold">{floorMark(item.nombre, item.numero)}</span>
-              <span className="text-[10px] text-white/75">{item.libres}</span>
-            </button>
-          ))}
+      {entered && !active && (
+        <div className="absolute bottom-5 left-4 z-20 flex flex-col gap-2">
+          <button type="button" aria-label="Acercar" className="round" onClick={() => setZoom((value) => Math.min(4, value + 0.25))}>+</button>
+          <button type="button" aria-label="Alejar" className="round" onClick={() => setZoom((value) => Math.max(1, value - 0.25))}>−</button>
         </div>
       )}
 
       {showRail && tower && (
-        <aside className="rail absolute right-4 top-1/2 z-20 hidden -translate-y-1/2 flex-col gap-0.5 rounded-full px-1.5 py-2 md:flex" data-testid="floor-rail">
+        <aside className="floor-rail absolute right-3 top-1/2 z-20 flex max-h-[78vh] -translate-y-1/2 flex-col gap-0.5 overflow-auto rounded-full px-1.5 py-2" data-testid="floor-rail">
           {tower.floors.map((item) => {
-            const current = phase === "planta" && item.id === floorId;
+            const current = item.id === floorId;
             return (
-              <button
-                key={item.id}
-                type="button"
-                title={`${item.libres} libres`}
-                className={`grid min-w-11 place-items-center rounded-full px-1 py-1 leading-none ${current ? "bg-white text-[#1c1915]" : "text-white"}`}
-                onClick={() => openFloor(item.id, phase === "planta" ? "replace" : "push")}
-              >
-                <span className="text-sm font-semibold">{floorMark(item.nombre, item.numero)}</span>
-                <span className={`text-[10px] ${current ? "text-[#6b6258]" : "text-white/75"}`}>{item.libres}</span>
+              <button key={item.id} type="button" title={`${item.libres} libres`} className={current ? "on" : ""} onClick={() => openFloor(item.id, "replace")}>
+                {floorMark(item.nombre, item.numero)}
               </button>
             );
           })}
         </aside>
       )}
 
-      {entered && (
-        <div className="context absolute inset-x-0 bottom-2 z-20 flex flex-nowrap justify-start gap-2 overflow-x-auto px-2 md:bottom-6 md:flex-wrap md:justify-center md:overflow-visible md:px-3">
-          <button type="button" data-testid="disponibilidad" aria-pressed={disp} className={disp ? "disp on" : "disp"} onClick={() => setDisponibilidad(!disp)}>
-            <span className="dots" aria-hidden="true"><i /><i /><i /></span>
-            Disponibilidad
-          </button>
-          {showRail && (
-            <button type="button" className="md:hidden" onClick={() => setFloorsOpen((open) => !open)}>Pisos</button>
-          )}
-          {veils && (
-            <button type="button" className="md:hidden" aria-pressed={legendOpen} onClick={() => setLegendOpen((open) => !open)}>Leyenda</button>
-          )}
-          {walk.some((item) => item.tipo === "aereo") && (
-            <button type="button" onClick={() => { const index = walk.findIndex((item) => item.tipo === "aereo"); if (index >= 0) { setSceneIndex(index); setPhase("escena"); } }}>Vista aérea</button>
-          )}
-          {building && building.floors[0] && (
-            <button type="button" onClick={goPlans}>Ver plantas</button>
-          )}
-          <button type="button" onClick={() => setSheet("mapa")}>Ubicación</button>
-          <button type="button" onClick={() => setSheet("galeria")}>Galería</button>
-          {data.progress.length > 0 && <button type="button" onClick={() => setSheet("obra")}>Obra</button>}
-          {data.project.brochure && <a href={data.project.brochure} target="_blank" rel="noreferrer">Brochure</a>}
-        </div>
-      )}
-
-      {entered && phase === "escena" && veils && legendOpen && (
-        <ul className="legend legend-pop md:hidden" data-testid="legend-mobile">
-          {(["disponible", "reservada", "vendida", "pausa"] as const).map((estado) => (
-            <li key={estado}><i style={{ background: STATUS_COLOR[estado] }} />{STATUS_LABEL[estado]}</li>
-          ))}
-        </ul>
-      )}
-
-      {entered && (phase === "planta" || scene?.tipo === "masterplan" || veils) && (
-        <ul className={`legend ${phase === "escena" ? "only-desk" : ""}`} data-testid="legend">
-          {(["disponible", "reservada", "vendida", "pausa"] as const).map((estado) => (
-            <li key={estado}><i style={{ background: STATUS_COLOR[estado] }} />{STATUS_LABEL[estado]}</li>
-          ))}
-        </ul>
-      )}
-
-      {phase === "planta" && (
-        <div className="absolute bottom-5 left-4 z-20 flex items-center gap-2">
-          <button type="button" className="rounded-full bg-white px-3 py-1 text-[#1c1915]" onClick={stepBack}>Volver</button>
-          <button type="button" className="rounded-full bg-white/90 px-3 py-1 text-[#1c1915]" onClick={() => setZoom((value) => Math.max(1, value - 0.25))}>−</button>
-          <button type="button" className="rounded-full bg-white/90 px-3 py-1 text-[#1c1915]" onClick={() => setZoom((value) => Math.min(4, value + 0.25))}>+</button>
-          {zoom > 1 && floor?.plano && (
-            <div className="relative hidden h-16 w-24 overflow-hidden rounded-md border border-white/40 md:block" data-testid="minimap">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={floor.plano} alt="" className="h-full w-full object-fill" />
-              <span className="absolute border border-white" style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, left: `${(1 - 1 / zoom) * 50}%`, top: `${(1 - 1 / zoom) * 50}%` }} />
-            </div>
-          )}
-        </div>
-      )}
-
       {active && (
-        <UnitPanel
+        <UnitSheet
           unit={active}
+          tab={unitTab}
+          setTab={setUnitTab}
           project={data.project}
           plans={data.plans}
           fallback={data.facade}
           plantaImagen={data.buildings.flatMap((item) => item.floors).find((item) => item.id === active.floor_id)?.plano ?? null}
-          compared={compare.includes(active.id)}
+          footprint={data.overlays.find((overlay) => overlay.contenedor === "floor" && overlay.vinculo_id === active.id)?.puntos ?? null}
           sent={sent}
           sending={sending}
           error={error}
-          onClose={stepBack}
-          onWhatsapp={() => whatsapp(active)}
-          onShare={() => void share(active)}
-          onCompare={() => toggleCompare(active.id)}
-          onTour={() => active.tour && setSheet("tour")}
-          onVista={() => active.vista_url && setSheet("vista")}
-          onAcabados={() => active.acabados.length && setSheet("acabados")}
           photo={photo}
           setPhoto={setPhoto}
+          onClose={stepBack}
+          onChangeFloor={stepBack}
+          onWhatsapp={() => whatsapp(active)}
+          onShare={() => void share(active)}
           onLead={submitLead}
         />
       )}
 
       {sheet === "menu" && (
-        <Menu
+        <PhMenu
           lite={lite}
-          extras={[
-            ...(data.progress.length ? [["obra", "Avance de obra"] as [string, string]] : []),
-            ...(data.sections.length ? [["secciones", "Secciones"] as [string, string]] : []),
-            ...(data.project.pasos.length ? [["pasos", "Cómo se paga"] as [string, string]] : []),
-            ...(data.project.brochure ? [["brochure", "Brochure"] as [string, string]] : []),
-            ["disponibilidad", disp ? "Ocultar disponibilidad" : "Disponibilidad"] as [string, string],
-          ]}
+          brochure={Boolean(data.project.brochure)}
+          redes={data.project.redes}
+          whatsapp={data.project.contacto.whatsapp}
+          brand={data.project.nombre}
+          logo={data.project.logo}
           onClose={() => setSheet(null)}
           onPick={(action) => {
             setSheet(null);
-            if (action === "intro") setEntered(false);
+            if (action === "intro") { setEntered(false); setUnitId(null); setDisponibilidad(false); return; }
             if (action === "edificio") {
+              setDisponibilidad(false);
               const index = walk.findIndex((item) => item.tipo === "exterior");
               setEntered(true);
               setPhase("escena");
+              setUnitId(null);
               if (index >= 0) setSceneIndex(index);
+              return;
             }
-            if (action === "plantas") {
+            if (action === "plantas") { setEntered(true); setDisponibilidad(false); goPlans(); return; }
+            if (action === "disponibilidad") {
               setEntered(true);
-              goPlans();
+              setPhase("escena");
+              setUnitId(null);
+              const index = walk.findIndex((item) => item.tipo === "exterior");
+              if (index >= 0) setSceneIndex(index);
+              setDisponibilidad(true);
+              return;
             }
             if (action === "amenities") setSheet("amenities");
-            if (action === "tour") {
-              if (active?.tour) setSheet("tour");
-              else {
-                const index = walk.findIndex((item) => item.video_url);
-                setEntered(true);
-                setPhase("escena");
-                if (index >= 0) setSceneIndex(index);
-                setPlaying(!lite);
-              }
-            }
-            if (action === "video") setPlaying(!lite && Boolean(scene?.video_url));
+            if (action === "recorridos") setSheet("recorridos");
+            if (action === "video") setSheet("video");
             if (action === "galeria") setSheet("galeria");
             if (action === "mapa") setSheet("mapa");
-            if (action === "info") setSheet("info");
-            if (action === "obra") setSheet("obra");
-            if (action === "secciones") setSheet("secciones");
-            if (action === "pasos") setSheet("pasos");
+            if (action === "contacto") setSheet("contacto");
             if (action === "brochure" && data.project.brochure) window.open(data.project.brochure, "_blank", "noopener");
-            if (action === "disponibilidad") setDisponibilidad(!disp);
+            if (action === "obra") setSheet("obra");
+            if (action === "pasos") setSheet("pasos");
             if (action === "lite") {
               const next = !lite;
               setLite(next);
               sessionStorage.setItem("adastra-lite", next ? "1" : "0");
               if (next) setPlaying(false);
             }
-            if (action === "full") {
-              if (!document.fullscreenElement) void document.documentElement.requestFullscreen();
-              else void document.exitFullscreen();
-            }
           }}
         />
       )}
 
-      {sheet && sheet !== "menu" && (
+      {sheet === "compartir" && qr && (
+        <div className="absolute right-4 top-20 z-40 w-56 rounded-2xl bg-white p-3 text-center text-[#1c1915] shadow-xl">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={qr} alt="Código QR" className="mx-auto h-44 w-44" />
+          <button type="button" className="mt-2 text-sm underline" onClick={() => void share(active)}>Copiar link</button>
+          {copied && <p className="text-xs text-[#6b6258]">Copiamos el link.</p>}
+          <button type="button" className="mt-2 block w-full text-sm" onClick={() => setSheet(null)}>Cerrar</button>
+        </div>
+      )}
+
+      {sheet === "galeria" && <GalleryStage images={data.gallery} title={data.project.nombre} onClose={() => setSheet(null)} />}
+      {sheet === "amenities" && <AmenityStage amenities={data.amenities} onClose={() => setSheet(null)} />}
+      {sheet === "mapa" && <MapStage project={data.project} pois={data.pois} onClose={() => setSheet(null)} />}
+      {sheet === "recorridos" && (
+        <RecorridoStage
+          options={Array.from(new Map(data.units.filter((unit) => unit.tour).map((unit) => [unit.tipologia, unit.tour!] as const)).entries()).map(([nombre, tour]) => ({ nombre, tour }))}
+          onClose={() => setSheet(null)}
+        />
+      )}
+      {sheet === "video" && <VideoStage src={cover?.video_url ?? null} title={data.project.nombre} onClose={() => setSheet(null)} />}
+      {sheet === "contacto" && <ContactStage project={data.project} organization={data.organization} onWhatsapp={() => whatsapp(null)} onClose={() => setSheet(null)} />}
+
+      {(sheet === "obra" || sheet === "secciones" || sheet === "pasos" || sheet === "comparar") && (
         <Drawer title={sheetTitle(sheet)} onClose={() => setSheet(null)}>
-          {sheet === "filtros" && (
-            <div className="space-y-3 text-sm text-[#1c1915]">
-              <p>{veils ? `${matches.length} coinciden en el edificio. Las demás quedan atenuadas.` : "La fachada está limpia. Activá Disponibilidad para ver el filtro pintado sobre los departamentos."}</p>
-              {!disp && <button type="button" className="rounded-full bg-[#1c1915] px-3 py-1 text-white" onClick={() => setDisponibilidad(true)}>Ver disponibilidad</button>}
-              <Select label="Estado" value={filters.estado} onChange={(estado) => setFilters({ ...filters, estado })} options={[["todos", "Todos"], ["disponible", "Disponible"], ["reservada", "Reservada"], ["vendida", "Vendida"], ["pausa", "En pausa"], ["bloqueada", "Bloqueada"], ["consultar", "Consultar"]]} />
-              <Select label="Ambientes" value={filters.ambientes} onChange={(ambientes) => setFilters({ ...filters, ambientes })} options={[["todos", "Todos"], ...data.filters.ambientes.map((n) => [String(n), String(n)] as [string, string])]} />
-              <Select label="Orientación" value={filters.orientacion} onChange={(orientacion) => setFilters({ ...filters, orientacion })} options={[["todas", "Todas"], ...data.filters.orientaciones.map((n) => [n, n] as [string, string])]} />
-              <label className="block">Precio máximo
-                <input value={filters.precioMax} onChange={(event) => setFilters({ ...filters, precioMax: event.target.value })} inputMode="numeric" className="mt-1 w-full rounded-xl border border-[#e4d9c8] px-3 py-2" placeholder="USD" />
-              </label>
-              {data.filters.fields.map((field) => (
-                <Select
-                  key={field.clave}
-                  label={field.nombre}
-                  value={extra[field.clave] ?? "todos"}
-                  onChange={(value) => setExtra({ ...extra, [field.clave]: value })}
-                  options={field.tipo === "boolean" ? [["todos", "Todos"], ["true", "Sí"], ["false", "No"]] : [["todos", "Todos"], ...field.opciones.map((opcion) => [opcion, opcion] as [string, string])]}
-                />
-              ))}
-              <Select label="Orden al saltar" value={filters.sort} onChange={(sort) => setFilters({ ...filters, sort: sort as FlowFilters["sort"] })} options={[["piso", "Piso"], ["precio", "Precio"], ["superficie", "Superficie"]]} />
-              <div className="flex gap-2">
-                <button type="button" className="rounded-full bg-[#1c1915] px-4 py-2 text-white" onClick={nextMatch}>Siguiente coincidencia</button>
-                <button type="button" className="rounded-full border border-[#e4d9c8] px-4 py-2" onClick={() => { setFilters(EMPTY_FILTERS); setExtra({}); }}>Limpiar</button>
-              </div>
-            </div>
-          )}
-          {sheet === "galeria" && <Gallery images={data.gallery} />}
-          {sheet === "amenities" && (
-            <ul className="space-y-4">
-              {data.amenities.map((amenity) => (
-                <li key={amenity.id}>
-                  {amenity.imagen && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={amenity.imagen} alt="" className="h-40 w-full rounded-2xl object-cover" />
-                  )}
-                  <p className="mt-2 font-serif text-2xl text-[#1c1915]">{amenity.nombre}</p>
-                </li>
-              ))}
-              {!data.amenities.length && <p className="text-sm text-[#6b6258]">Este proyecto todavía no cargó amenities.</p>}
-            </ul>
-          )}
-          {sheet === "mapa" && <MapBlock project={data.project} pois={data.pois} />}
-          {sheet === "info" && (
-            <div className="space-y-3 text-sm text-[#1c1915]">
-              <p>{data.project.descripcion}</p>
-              <p>{data.project.direccion}</p>
-              {data.project.fecha_entrega && <p>Entrega {new Date(data.project.fecha_entrega).toLocaleDateString("es-AR", { month: "long", year: "numeric" })}</p>}
-              <h3 className="font-serif text-2xl">{data.organization.nombre}</h3>
-              <p>{data.organization.descripcion}</p>
-              <p>{data.project.contacto.telefono}</p>
-              <p>{data.project.contacto.email}</p>
-              <div className="flex flex-wrap gap-3">
-                {Object.entries(data.project.redes).map(([red, url]) => (
-                  <a key={red} href={url} className="underline" target="_blank" rel="noreferrer">{red}</a>
-                ))}
-              </div>
-              <button type="button" className="rounded-full bg-[#1f8a5b] px-4 py-2 text-white" onClick={() => whatsapp(null)}>WhatsApp</button>
-            </div>
-          )}
           {sheet === "comparar" && (
             <div className="grid gap-3 md:grid-cols-3">
               {compare.map((id) => {
@@ -1007,47 +1040,20 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
                 if (!unit) return null;
                 return (
                   <article key={id} className="rounded-2xl border border-[#e4d9c8] p-3 text-sm text-[#1c1915]">
-                    <p className="font-serif text-2xl">{unit.codigo}</p>
-                    <p>{unit.torre} · {unit.piso}</p>
-                    <p>{unit.estado === "consultar" || unit.precio == null ? "Consultar" : formatUsd(unit.precio)}</p>
-                    <p>{unit.m2_totales ? `${formatM2(unit.m2_totales)} m²` : ""} · {unit.dormitorios ?? "—"} dorm.</p>
+                    <p className="text-2xl">{unit.codigo}</p>
                     <p>{STATUS_LABEL[unit.estado]}</p>
-                    <button type="button" className="mt-2 text-[#9a6240]" onClick={() => toggleCompare(id)}>Quitar</button>
-                    <button type="button" className="mt-2 block" onClick={() => { setSheet(null); chooseUnit(unit, "comparar"); }}>Ver ficha</button>
+                    <button type="button" className="mt-2 block" onClick={() => { setSheet(null); enterUnit(unit, "comparar"); }}>Ver ficha</button>
                   </article>
                 );
               })}
-            </div>
-          )}
-          {sheet === "tour" && active?.tour && <TourBlock tour={active.tour} />}
-          {sheet === "vista" && active?.vista_url && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={active.vista_url} alt="Vista desde esta altura" className="w-full rounded-2xl" />
-          )}
-          {sheet === "acabados" && (
-            <div className="grid grid-cols-2 gap-2">
-              {active?.acabados.map((url) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={url} src={url} alt="Acabado" className="h-28 w-full rounded-xl object-cover" />
-              ))}
-            </div>
-          )}
-          {sheet === "compartir" && (
-            <div className="space-y-2 text-sm text-[#1c1915]">
-              <button type="button" className="block" onClick={() => void share(active)}>Copiar link</button>
-              {copied && <p>Copiamos el link.</p>}
             </div>
           )}
           {sheet === "obra" && (
             <ol className="space-y-4">
               {data.progress.map((item) => (
                 <li key={item.id}>
-                  {item.imagen_url && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.imagen_url} alt="" className="h-40 w-full rounded-2xl object-cover" />
-                  )}
-                  <p className="mt-2 text-xs uppercase tracking-[0.14em] text-[#9a6240]">{item.fecha}</p>
-                  <p className="font-serif text-2xl text-[#1c1915]">{item.titulo}</p>
+                  <p className="text-xs uppercase tracking-[0.14em] text-[#9a6240]">{item.fecha}</p>
+                  <p className="text-2xl text-[#1c1915]">{item.titulo}</p>
                   <p className="text-sm text-[#6b6258]">{item.descripcion}</p>
                 </li>
               ))}
@@ -1057,7 +1063,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
             <div className="space-y-5">
               {data.sections.map((item) => (
                 <article key={item.id}>
-                  <h3 className="font-serif text-2xl text-[#1c1915]">{item.titulo}</h3>
+                  <h3 className="text-2xl text-[#1c1915]">{item.titulo}</h3>
                   <p className="mt-1 text-sm text-[#1c1915]">{item.cuerpo}</p>
                 </article>
               ))}
@@ -1071,11 +1077,11 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
                   <span className="pt-1">{paso}</span>
                 </li>
               ))}
-              {data.project.legal && <p className="pt-2 text-xs text-[#6b6258]">{data.project.legal}</p>}
             </ol>
           )}
         </Drawer>
       )}
+
       {cookies === "ask" && data.project.cookies && (
         <div className="cookie" data-testid="cookies">
           <p className="max-w-xl text-sm">{data.project.cookies}</p>
@@ -1130,6 +1136,9 @@ function Stage({
   clip,
   zoom,
   pan,
+  soft = false,
+  backdrop = null,
+  marks = [],
   video,
   poster,
   children,
@@ -1148,6 +1157,9 @@ function Stage({
   clip?: [number, number][];
   zoom: number;
   pan: { x: number; y: number };
+  soft?: boolean;
+  backdrop?: string | null;
+  marks?: { id: string; x: number; y: number; color: string; label: string; dim: boolean }[];
   video: string | null;
   poster?: string;
   children?: React.ReactNode;
@@ -1194,6 +1206,10 @@ function Stage({
       onPointerCancel={onPointerUp}
       onPointerLeave={onPointerUp}
     >
+      {backdrop && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={backdrop} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-cover" style={{ filter: "blur(18px) brightness(0.42)", transform: "scale(1.08)" }} />
+      )}
       <div
         className="absolute"
         style={{
@@ -1210,7 +1226,7 @@ function Stage({
           key={src}
           src={src}
           alt=""
-          className="stage-fade h-full w-full object-fill"
+          className={`stage-fade h-full w-full object-fill ${soft ? "stage-soft" : ""}`}
           draggable={false}
           onLoad={(event) => {
             const img = event.currentTarget;
@@ -1245,6 +1261,12 @@ function Stage({
           </svg>
           {veil}
         </div>
+        {marks.map((mark) => (
+          <span key={mark.id} className={mark.dim ? "plan-pill dim" : "plan-pill"} style={{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%` }}>
+            <i style={{ background: mark.color }} />
+            {mark.label}
+          </span>
+        ))}
       </div>
     </div>
   );

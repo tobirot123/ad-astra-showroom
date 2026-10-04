@@ -65,10 +65,13 @@ export function applyPol(db: Database, now: Date) {
     email: "comercial@demo.adastra",
     telefono: "+598 0000 0000",
   };
-  project.redes = {};
+  project.redes = {
+    instagram: "https://instagram.com",
+    facebook: "https://facebook.com",
+  };
   project.settings = {
     ...project.settings,
-    color_acento: "#4A6844",
+    color_acento: "#C4A574",
     titulo_publico: "POL",
     logo_url: `${ROOT}/brand/pol-logo.svg`,
     texto_legal: "Precios de demostración para este showroom, calculados aparte de la lista comercial. Las imágenes son renders del proyecto.",
@@ -272,6 +275,22 @@ export function applyPol(db: Database, now: Date) {
     });
   }
 
+  const sharedByCode: Record<string, { plano3d: string; interiores: string[] }> = {
+    "602": { plano3d: `${ROOT}/unidades/UF-502-1002_render3d.webp`, interiores: [`${ROOT}/interiores/int-03_101-201.webp`, `${ROOT}/interiores/int-04_101-201.webp`] },
+    "702": { plano3d: `${ROOT}/unidades/UF-502-1002_render3d.webp`, interiores: [`${ROOT}/interiores/int-03_101-201.webp`, `${ROOT}/interiores/int-04_101-201.webp`] },
+    "802": { plano3d: `${ROOT}/unidades/UF-502-1002_render3d.webp`, interiores: [`${ROOT}/interiores/int-03_101-201.webp`, `${ROOT}/interiores/int-04_101-201.webp`] },
+    "902": { plano3d: `${ROOT}/unidades/UF-502-1002_render3d.webp`, interiores: [`${ROOT}/interiores/int-03_101-201.webp`, `${ROOT}/interiores/int-04_101-201.webp`] },
+    "603": { plano3d: `${ROOT}/unidades/UF-503-703_render3d.webp`, interiores: [`${ROOT}/interiores/int-07_103-203.webp`, `${ROOT}/interiores/int-08_104-204.webp`] },
+  };
+  for (const [codigo, shared] of Object.entries(sharedByCode)) {
+    const id = unitIds.get(codigo);
+    if (!id) continue;
+    link(addMedia(shared.plano3d, `Planta 3D ${codigo}`, "unidades"), "unit", id, "render", 0);
+    shared.interiores.forEach((url, index) => {
+      link(addMedia(url, `Interior ${codigo}`, "interiores"), "unit", id, "galeria", index + 1);
+    });
+  }
+
   pol.floors.forEach((floor) => {
     const id = floorIds.get(floor.key);
     if (!id) return;
@@ -428,7 +447,26 @@ export function applyPol(db: Database, now: Date) {
     orden: index + 1,
   }));
 
-  db.tours = [];
+  const tourByTipo: Record<string, string> = {
+    Monoambiente: `${ROOT}/interiores/int-04_101-201.webp`,
+    "1 dormitorio": `${ROOT}/interiores/int-06_102-202.webp`,
+    "2 dormitorios": `${ROOT}/interiores/int-16_501.webp`,
+    "3 dormitorios": `${ROOT}/interiores/int-18_904.webp`,
+  };
+  db.tours = Object.entries(tourByTipo).flatMap(([nombre, url], index) => {
+    const id = typologies.get(nombre);
+    if (!id) return [];
+    return [{
+      id: seedId(4800 + index),
+      project_id: PROJECT,
+      entidad: "typology" as const,
+      entidad_id: id,
+      proveedor: "url" as const,
+      url,
+      titulo: `Recorrido ${nombre}`,
+      orden: index + 1,
+    }];
+  });
   db.construction_updates = [
     {
       id: seedId(4700),

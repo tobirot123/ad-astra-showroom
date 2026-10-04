@@ -133,6 +133,8 @@ export function buildShowroom(db: Database, slug: string) {
           .filter((f) => f.value != null && f.value !== ""),
         values: Object.fromEntries(fields.map((f) => [f.clave, unit.custom_values[f.clave] ?? null])),
         plano: mediaOf("plano")[0] ?? null,
+        planta3d: mediaOf("render")[0] ?? null,
+        galeria: mediaOf("galeria"),
         renders: [...mediaOf("render"), ...mediaOf("galeria")],
         acabados: mediaOf("acabado"),
         videos: mediaOf("video"),

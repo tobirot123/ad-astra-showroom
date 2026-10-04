@@ -56,7 +56,7 @@ describe("cotizador", () => {
     expect(data.custom_sections[0]?.titulo).toBe("El edificio");
     expect(data.projects[0]?.settings.usd_ars).toBe(1450);
     expect(data.projects[0]?.slug).toBe("pol");
-    expect(data.projects[0]?.settings.color_acento).toBe("#4A6844");
+    expect(data.projects[0]?.settings.color_acento).toBe("#C4A574");
   });
 });
 
