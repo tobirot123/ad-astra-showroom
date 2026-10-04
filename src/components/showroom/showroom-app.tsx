@@ -9,7 +9,7 @@ import { STATUS_COLOR, STATUS_LABEL, formatM2, formatNumber, formatUsd } from "@
 import { travelMinutes } from "@/lib/domain/geo";
 import { poiColor, poiLabel } from "@/lib/domain/poi";
 import "./showroom.css";
-import { coverFrame } from "@/lib/domain/cover-frame";
+import { coverFrame, portraitCenter } from "@/lib/domain/cover-frame";
 import { floorKey, sceneKey, sortUnits, tourEmbed, unitMatches, videosToLoad, type FlowFilters } from "@/lib/domain/showroom-flow";
 import type { ShowroomData } from "@/lib/services/present";
 
@@ -565,7 +565,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         stageRef={stageRef}
         src={image}
         cover={fitCover}
-        focus={{ x: 0.49, y: 0.48 }}
+        focus={{ x: phase === "escena" ? portraitCenter(scene?.nombre) : 0.5, y: 0.48 }}
         shift={coverShift}
         clip={phase === "escena" && scene?.tipo === "exterior" ? scene.silueta ?? undefined : undefined}
         zoom={phase === "planta" ? zoom : 1}

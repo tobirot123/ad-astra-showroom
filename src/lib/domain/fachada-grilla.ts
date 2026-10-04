@@ -91,10 +91,10 @@ function slabPoint(quad: Quad, slab: { izq: number; der: number }, u: number): P
   return [Number(lerp(left[0], right[0], u).toFixed(4)), Number(lerp(left[1], right[1], u).toFixed(4))];
 }
 
-/** Vano entre dos losas. Un margen chico deja ver la losa sin cruzarla. */
+/** Vano entre dos losas. El margen deja la losa blanca a la vista, sin que el velo la cruce. */
 function bay(quad: Quad, top: { izq: number; der: number }, bottom: { izq: number; der: number }, u0: number, u1: number): Point[] {
   const padU = (u1 - u0) * 0.04;
-  const pad = 0.07;
+  const pad = 0.11;
   const topIn = { izq: top.izq + (bottom.izq - top.izq) * pad, der: top.der + (bottom.der - top.der) * pad };
   const bottomIn = { izq: bottom.izq - (bottom.izq - top.izq) * pad, der: bottom.der - (bottom.der - top.der) * pad };
   return [
@@ -225,18 +225,32 @@ export const POL_CARAS: Record<string, FachadaCara[]> = {
       losas: LOSAS,
       orientaciones: ["Norte-Este", "Este"],
     },
+    {
+      id: "360-pb-oeste",
+      esquinas: [[0.388, 0.724], [0.495, 0.702], [0.494, 0.744], [0.39, 0.766]],
+      pisos: [0],
+      losas: [{ izq: 0, der: 0 }, { izq: 1, der: 1 }],
+      orientaciones: ["Sur-Oeste"],
+    },
+    {
+      id: "360-pb-sur",
+      esquinas: [[0.495, 0.702], [0.622, 0.685], [0.62, 0.72], [0.494, 0.744]],
+      pisos: [0],
+      losas: [{ izq: 0, der: 0 }, { izq: 1, der: 1 }],
+      orientaciones: ["Sur"],
+    },
   ],
   "90": [
     {
       id: "90-balcones",
-      esquinas: [[0.386, 0.402], [0.498, 0.368], [0.49, 0.672], [0.38, 0.692]],
+      esquinas: [[0.386, 0.42], [0.498, 0.368], [0.49, 0.658], [0.38, 0.674]],
       pisos: PISOS,
       losas: LOSAS,
       orientaciones: ["Norte-Oeste", "Norte", "Norte-Este"],
     },
     {
       id: "90-ranuras",
-      esquinas: [[0.498, 0.368], [0.65, 0.414], [0.63, 0.656], [0.49, 0.672]],
+      esquinas: [[0.498, 0.368], [0.65, 0.414], [0.63, 0.64], [0.49, 0.658]],
       pisos: PISOS,
       losas: LOSAS,
       orientaciones: ["Este", "Sur-Este", "Sur", "Sur-Oeste"],
@@ -245,14 +259,14 @@ export const POL_CARAS: Record<string, FachadaCara[]> = {
   "255": [
     {
       id: "255-norte",
-      esquinas: [[0.352, 0.398], [0.494, 0.376], [0.486, 0.74], [0.366, 0.762]],
+      esquinas: [[0.336, 0.398], [0.49, 0.376], [0.484, 0.74], [0.348, 0.762]],
       pisos: PISOS,
       losas: LOSAS,
       orientaciones: ["Norte-Oeste", "Norte", "Norte-Este"],
     },
     {
       id: "255-este",
-      esquinas: [[0.494, 0.376], [0.578, 0.404], [0.552, 0.708], [0.486, 0.74]],
+      esquinas: [[0.49, 0.376], [0.578, 0.404], [0.552, 0.708], [0.484, 0.74]],
       pisos: PISOS,
       losas: LOSAS,
       orientaciones: ["Este", "Sur-Este", "Sur", "Sur-Oeste"],

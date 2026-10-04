@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coverFrame } from "@/lib/domain/cover-frame";
+import { coverFrame, portraitCenter } from "@/lib/domain/cover-frame";
 
 const phones = [
   [390, 844],
@@ -27,6 +27,16 @@ describe("encuadre del recorrido", () => {
     expect(panned.top + panned.height).toBeGreaterThanOrEqual(844 - 0.5);
     expect(panned.left).toBeLessThanOrEqual(0);
     expect(panned.left + panned.width).toBeGreaterThanOrEqual(390 - 0.5);
+  });
+
+  it("en 390 el recorte inicial muestra la esquina derecha de la torre", () => {
+    const frame = coverFrame(390, 844, 1920, 1080, portraitCenter("360°"), 0.48, 0);
+    const x0 = -frame.left / frame.width;
+    const x1 = (390 - frame.left) / frame.width;
+    expect(x1).toBeGreaterThanOrEqual(0.63);
+    expect(x0).toBeLessThanOrEqual(0.39);
+    expect(frame.top + frame.height).toBeGreaterThanOrEqual(844 - 0.5);
+    expect(frame.top).toBeLessThanOrEqual(0.5);
   });
 
   it("en el escritorio la foto llena el viewport", () => {

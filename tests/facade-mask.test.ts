@@ -19,7 +19,7 @@ describe("máscaras de fachada", () => {
     const data = buildSeed(new Date("2026-10-02T15:00:00.000Z"));
     const showroom = buildShowroom(data, "pol");
     const hidden: Record<string, string[]> = {
-      "360°": ["Sur", "Sur-Este", "Sur-Oeste"],
+      "360°": ["Sur-Este"],
       "90°": [],
       "255°": [],
     };
@@ -42,6 +42,11 @@ describe("máscaras de fachada", () => {
       expect(Math.min(...lows)).toBeGreaterThan(0.34);
       expect(Math.max(...lows)).toBeGreaterThan(box.piso);
     }
+    const at360 = showroom?.scenes.find((item) => item.nombre === "360°");
+    const codes = new Set((at360?.hotspots ?? []).map((hotspot) => showroom?.units.find((unit) => unit.id === hotspot.vinculo_id)?.codigo));
+    expect(codes.has("PB001")).toBe(true);
+    expect(codes.has("PB002")).toBe(true);
+    expect(codes.has("PB003")).toBe(true);
   });
 
   it("recorta lo que se sale de la silueta", () => {
@@ -82,7 +87,7 @@ describe("máscaras de fachada", () => {
         expect(cara.pisos[0]).toBeGreaterThanOrEqual(cara.pisos.at(-1) ?? 0);
         expect(cara.losas).toHaveLength(cara.pisos.length + 1);
         const gap = (cara.losas ?? []).map((slab, index, all) => (all[index + 1] ? all[index + 1]!.izq - slab.izq : 0)).filter((value) => value > 0);
-        expect(gap.at(-1)).toBeGreaterThan((gap.reduce((sum, value) => sum + value, 0) / gap.length) * 1.2);
+        if (gap.length > 1) expect(gap.at(-1)).toBeGreaterThan((gap.reduce((sum, value) => sum + value, 0) / gap.length) * 1.2);
       }
     }
   });
