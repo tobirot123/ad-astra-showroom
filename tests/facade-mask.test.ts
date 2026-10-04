@@ -9,9 +9,9 @@ import { buildShowroom } from "@/lib/services/present";
 import { ServiceError } from "@/lib/domain/types";
 
 const BOUNDS: Record<string, { x0: number; x1: number; y0: number; y1: number }> = {
-  "360°": { x0: 0.38, x1: 0.6, y0: 0.3, y1: 0.78 },
-  "90°": { x0: 0.37, x1: 0.53, y0: 0.3, y1: 0.8 },
-  "255°": { x0: 0.36, x1: 0.6, y0: 0.27, y1: 0.8 },
+  "360°": { x0: 0.34, x1: 0.63, y0: 0.33, y1: 0.83 },
+  "90°": { x0: 0.36, x1: 0.65, y0: 0.33, y1: 0.76 },
+  "255°": { x0: 0.32, x1: 0.64, y0: 0.33, y1: 0.83 },
 };
 
 describe("máscaras de fachada", () => {
@@ -20,7 +20,7 @@ describe("máscaras de fachada", () => {
     const showroom = buildShowroom(data, "pol");
     const hidden: Record<string, string[]> = {
       "360°": ["Sur", "Sur-Este", "Sur-Oeste"],
-      "90°": ["Norte-Oeste"],
+      "90°": [],
       "255°": [],
     };
     for (const [nombre, box] of Object.entries(BOUNDS)) {
@@ -52,6 +52,9 @@ describe("máscaras de fachada", () => {
         expect(Math.abs(topLeft[1] - topRight[1])).toBeGreaterThan(0.012);
         expect(Math.abs(bottomLeft[1] - bottomRight[1])).toBeGreaterThan(0.012);
         expect(cara.pisos[0]).toBeGreaterThanOrEqual(cara.pisos.at(-1) ?? 0);
+        expect(cara.losas).toHaveLength(cara.pisos.length + 1);
+        const gap = (cara.losas ?? []).map((slab, index, all) => (all[index + 1] ? all[index + 1]!.izq - slab.izq : 0)).filter((value) => value > 0);
+        expect(gap.at(-1)).toBeGreaterThan((gap.reduce((sum, value) => sum + value, 0) / gap.length) * 1.2);
       }
     }
   });

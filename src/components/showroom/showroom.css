@@ -93,12 +93,22 @@
 @media (max-width: 767px) {
   .showroom .context button,
   .showroom .context a {
-    padding: 0.55rem 0.8rem;
-    font-size: 0.75rem;
+    flex: 0 0 auto;
+    padding: 0.4rem 0.65rem;
+    font-size: 0.72rem;
+  }
+
+  .showroom .legend.only-desk {
+    display: none;
   }
 
   .showroom .legend {
-    bottom: 4.6rem;
+    bottom: 3.4rem;
+    max-width: calc(100% - 1.5rem);
+  }
+
+  .showroom .legend-pop {
+    bottom: 3.6rem;
   }
 }
 
@@ -280,6 +290,15 @@
   font-size: 1.6rem;
   line-height: 1;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+}
+
+@media (max-width: 767px) {
+  .showroom .spin-btn {
+    height: 1.85rem;
+    width: 1.85rem;
+    font-size: 1.05rem;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.28);
+  }
 }
 
 .poi-pin {

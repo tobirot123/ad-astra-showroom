@@ -1310,7 +1310,15 @@ export function saveFachadas(
     const pisos = (cara.pisos ?? []).map((level) => Number(level)).filter((level) => Number.isInteger(level));
     const orientaciones = (cara.orientaciones ?? []).map((item) => String(item).trim()).filter(Boolean);
     if (!pisos.length || !orientaciones.length) throw new ServiceError("Cada cara necesita pisos y orientaciones.");
-    return { id: String(cara.id || `${viewpointId}-${index}`), esquinas, pisos, orientaciones };
+    const losas = Array.isArray(cara.losas) && cara.losas.length === pisos.length + 1
+      ? cara.losas.map((slab, slabIndex) => {
+          const t = (value: number) => Math.min(1, Math.max(0, Math.round(Number(value) * 10000) / 10000));
+          if (slabIndex === 0) return { izq: 0, der: 0 };
+          if (slabIndex === cara.losas!.length - 1) return { izq: 1, der: 1 };
+          return { izq: t(slab.izq), der: t(slab.der) };
+        })
+      : undefined;
+    return { id: String(cara.id || `${viewpointId}-${index}`), esquinas, pisos, orientaciones, ...(losas ? { losas } : {}) };
   });
   const previous = project.settings.fachadas ?? [];
   const next: FachadaGrilla[] = previous.filter((item) => item.viewpoint_id !== viewpointId);

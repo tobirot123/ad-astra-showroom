@@ -64,13 +64,17 @@ function contain(boxW: number, boxH: number, imgW: number, imgH: number) {
   return { left: (boxW - width) / 2, top: (boxH - height) / 2, width, height };
 }
 
-/** object-fit: cover, centrado en la torre. El desplazamiento horizontal se recorta al encuadre. */
+/** En el celular el ancho de la torre entra entero. En el escritorio la foto llena la pantalla. */
 function coverFrame(boxW: number, boxH: number, imgW: number, imgH: number, focusX: number, focusY: number, shiftX: number) {
-  const scale = Math.max(boxW / imgW, boxH / imgH);
+  const portrait = boxH > boxW * 1.15;
+  const span = portrait ? 0.38 : 1;
+  const centerX = portrait ? 0.49 : focusX;
+  const centerY = portrait ? 0.52 : focusY;
+  const scale = portrait ? boxW / (span * imgW) : Math.max(boxW / imgW, boxH / imgH);
   const width = imgW * scale;
   const height = imgH * scale;
-  let left = boxW / 2 - focusX * width + shiftX;
-  let top = boxH / 2 - focusY * height;
+  let left = boxW / 2 - centerX * width + shiftX;
+  let top = boxH / 2 - centerY * height;
   left = Math.min(0, Math.max(boxW - width, left));
   top = Math.min(0, Math.max(boxH - height, top));
   return { left, top, width, height };
@@ -122,6 +126,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const [disp, setDisp] = useState(false);
   const [coverShift, setCoverShift] = useState(0);
   const [floorsOpen, setFloorsOpen] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
   const swipe = useRef<{ x: number; y: number; lx: number; ly: number; shift: number } | null>(null);
@@ -426,6 +431,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
 
   function setDisponibilidad(on: boolean) {
     setDisp(on);
+    if (!on) setLegendOpen(false);
     const url = new URL(window.location.href);
     if (on) url.searchParams.set("disp", "1");
     else url.searchParams.delete("disp");
@@ -773,8 +779,8 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
 
       {entered && phase === "escena" && walk.length > 1 && (
         <>
-          <button type="button" aria-label="Girar a la izquierda" className="spin-btn absolute left-4 top-1/2 z-30 -translate-y-1/2" onClick={() => spin(-1)}>‹</button>
-          <button type="button" aria-label="Girar a la derecha" className="spin-btn absolute right-4 top-1/2 z-30 -translate-y-1/2 md:right-20" onClick={() => spin(1)}>›</button>
+          <button type="button" aria-label="Girar a la izquierda" className="spin-btn absolute left-1 top-1/2 z-30 -translate-y-1/2 md:left-4" onClick={() => spin(-1)}>‹</button>
+          <button type="button" aria-label="Girar a la derecha" className="spin-btn absolute right-1 top-1/2 z-30 -translate-y-1/2 md:right-20" onClick={() => spin(1)}>›</button>
         </>
       )}
 
@@ -810,13 +816,16 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       )}
 
       {entered && (
-        <div className="context absolute inset-x-0 bottom-4 z-20 flex flex-wrap justify-center gap-2 px-3 md:bottom-6">
+        <div className="context absolute inset-x-0 bottom-2 z-20 flex flex-nowrap justify-start gap-2 overflow-x-auto px-2 md:bottom-6 md:flex-wrap md:justify-center md:overflow-visible md:px-3">
           <button type="button" data-testid="disponibilidad" aria-pressed={disp} className={disp ? "disp on" : "disp"} onClick={() => setDisponibilidad(!disp)}>
             <span className="dots" aria-hidden="true"><i /><i /><i /></span>
             Disponibilidad
           </button>
           {showRail && (
             <button type="button" className="md:hidden" onClick={() => setFloorsOpen((open) => !open)}>Pisos</button>
+          )}
+          {veils && (
+            <button type="button" className="md:hidden" aria-pressed={legendOpen} onClick={() => setLegendOpen((open) => !open)}>Leyenda</button>
           )}
           {walk.some((item) => item.tipo === "aereo") && (
             <button type="button" onClick={() => { const index = walk.findIndex((item) => item.tipo === "aereo"); if (index >= 0) { setSceneIndex(index); setPhase("escena"); } }}>Vista aérea</button>
@@ -831,8 +840,16 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         </div>
       )}
 
+      {entered && phase === "escena" && veils && legendOpen && (
+        <ul className="legend legend-pop md:hidden" data-testid="legend-mobile">
+          {(["disponible", "reservada", "vendida", "pausa"] as const).map((estado) => (
+            <li key={estado}><i style={{ background: STATUS_COLOR[estado] }} />{STATUS_LABEL[estado]}</li>
+          ))}
+        </ul>
+      )}
+
       {entered && (phase === "planta" || scene?.tipo === "masterplan" || veils) && (
-        <ul className="legend" data-testid="legend">
+        <ul className={`legend ${phase === "escena" ? "only-desk" : ""}`} data-testid="legend">
           {(["disponible", "reservada", "vendida", "pausa"] as const).map((estado) => (
             <li key={estado}><i style={{ background: STATUS_COLOR[estado] }} />{STATUS_LABEL[estado]}</li>
           ))}
