@@ -103,7 +103,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const [tip, setTip] = useState<{ id: string; x: number; y: number } | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
-  const swipe = useRef<{ x: number; y: number } | null>(null);
+  const swipe = useRef<{ x: number; y: number; lx: number; ly: number } | null>(null);
   const moved = useRef(false);
 
   const scene = walk[sceneIndex] ?? walk[0];
@@ -555,11 +555,22 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         }}
         onPointerDown={(event) => {
           moved.current = false;
-          if (phase === "escena" && entered && !bridge) swipe.current = { x: event.clientX, y: event.clientY };
+          if (phase === "escena" && entered && !bridge) swipe.current = { x: event.clientX, y: event.clientY, lx: event.clientX, ly: event.clientY };
           if (phase !== "planta" || zoom === 1) return;
           drag.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y };
         }}
         onPointerMove={(event) => {
+          if (swipe.current && phase === "escena" && !bridge) {
+            swipe.current.lx = event.clientX;
+            swipe.current.ly = event.clientY;
+            const dx = swipe.current.lx - swipe.current.x;
+            const dy = swipe.current.ly - swipe.current.y;
+            if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+              swipe.current = null;
+              moved.current = true;
+              spin(dx < 0 ? 1 : -1);
+            }
+          }
           if (!drag.current) return;
           const dx = event.clientX - drag.current.x;
           const dy = event.clientY - drag.current.y;
@@ -571,8 +582,11 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           const start = swipe.current;
           swipe.current = null;
           if (!start || phase !== "escena" || bridge) return;
-          const dx = event.clientX - start.x;
-          const dy = event.clientY - start.y;
+          const lost = event.type === "pointercancel" || event.type === "pointerleave";
+          const endX = lost ? start.lx : event.clientX;
+          const endY = lost ? start.ly : event.clientY;
+          const dx = endX - start.x;
+          const dy = endY - start.y;
           if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.4) {
             moved.current = true;
             spin(dx < 0 ? 1 : -1);
@@ -1067,10 +1081,11 @@ function Stage({
   return (
     <div
       ref={stageRef}
-      className="absolute inset-0"
+      className="absolute inset-0 touch-none"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
       onPointerLeave={onPointerUp}
     >
       <div
