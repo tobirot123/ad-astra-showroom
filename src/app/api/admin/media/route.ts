@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     const file = form.get("file");
     const projectId = String(form.get("projectId") ?? "");
     const carpeta = String(form.get("carpeta") ?? "renders");
-    const rol = String(form.get("rol") ?? "render") as "render" | "plano" | "portada" | "fachada";
+    const rol = String(form.get("rol") ?? "render") as "render" | "plano" | "portada" | "fachada" | "vista";
     const unitId = String(form.get("unitId") ?? "") || null;
     const typologyId = String(form.get("typologyId") ?? "") || null;
     if (!(file instanceof File)) {

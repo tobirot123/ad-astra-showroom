@@ -2,7 +2,9 @@ import { computeMetrics, deltaPct, type MetricsSnapshot } from "@/lib/domain/met
 import { can, canSeeLead } from "@/lib/domain/permissions";
 import type { Actor, Database, Unit } from "@/lib/domain/types";
 import { cashPrice, financedQuote, hoursLeftLabel, pendingBadge, publicStatus } from "@/lib/services/engine";
+import { floorKey } from "@/lib/domain/showroom-flow";
 import { withEffectiveAreas } from "@/lib/domain/units";
+import { encuadreVista, vistaPorOrientacion } from "@/lib/domain/vista";
 
 function mediaUrl(db: Database, mediaId: string | undefined): string | null {
   if (!mediaId) return null;
@@ -46,10 +48,11 @@ export function buildShowroom(db: Database, slug: string) {
         if (link.entidad === "unit" && link.entidad_id === unit.id) featureIds.add(link.characteristic_id);
         if (typology && link.entidad === "typology" && link.entidad_id === typology.id) featureIds.add(link.characteristic_id);
       }
-      const links = db.media_links.filter((l) =>
-        (l.entidad === "unit" && l.entidad_id === unit.id) ||
-        (typology && l.entidad === "typology" && l.entidad_id === typology.id),
-      );
+      const unitLinks = db.media_links.filter((l) => l.entidad === "unit" && l.entidad_id === unit.id);
+      const typologyLinks = typology ? db.media_links.filter((l) => l.entidad === "typology" && l.entidad_id === typology.id) : [];
+      const links = [...unitLinks, ...typologyLinks];
+      const vistaPropia = urlsFor(db, unitLinks, "vista")[0] ?? urlsFor(db, typologyLinks, "vista")[0] ?? null;
+      const vistaUrl = unit.vista === "sin" ? null : vistaPropia ?? vistaPorOrientacion(unit.orientacion, project.settings.vistas_orientacion);
       const floorLinks = db.media_links.filter((l) => l.entidad === "floor" && l.entidad_id === unit.floor_id);
       const mediaOf = (rol: string) => urlsFor(db, links, rol);
       const overlay = db.overlays.find(
@@ -81,7 +84,8 @@ export function buildShowroom(db: Database, slug: string) {
         m2_cubiertos: eff.m2_cubiertos,
         m2_totales: eff.m2_totales,
         orientacion: eff.orientacion,
-        vista: eff.vista,
+        vista: unit.vista === "sin" ? null : eff.vista,
+        planta: floor ? floorKey(floor.numero) : "",
         estado,
         precio,
         mostrar_precio: eff.mostrar_precio && estado !== "consultar",
@@ -96,7 +100,8 @@ export function buildShowroom(db: Database, slug: string) {
         renders: [...mediaOf("render"), ...mediaOf("galeria")],
         acabados: mediaOf("acabado"),
         videos: mediaOf("video"),
-        vista_url: urlsFor(db, floorLinks, "vista")[0] ?? null,
+        vista_url: vistaUrl,
+        vista_encuadre: encuadreVista(floor?.numero ?? 0, Boolean(vistaPropia)),
         quote: estado === "consultar" ? null : financedQuote(db, unit),
         polygon: overlay?.puntos ?? null,
         tour: tour ? { titulo: tour.titulo, proveedor: tour.proveedor, url: tour.url } : unit.tour_url ? { titulo: "Tour 360", proveedor: "url" as const, url: unit.tour_url } : null,
@@ -127,6 +132,7 @@ export function buildShowroom(db: Database, slug: string) {
       return {
         ...scene,
         transicion_url: parada?.transicion_url ?? null,
+        reversa_url: parada?.reversa_url ?? null,
         vuelo_url: parada?.vuelo_url ?? null,
         hotspots: publishedOverlays.filter((overlay) => overlay.contenedor === "scene" && overlay.contenedor_id === scene.id),
       };
@@ -142,6 +148,7 @@ export function buildShowroom(db: Database, slug: string) {
       imagen_url: facadeUrl,
       video_url: null,
       transicion_url: null,
+      reversa_url: null,
       vuelo_url: null,
       hotspots: [],
     });
@@ -163,6 +170,7 @@ export function buildShowroom(db: Database, slug: string) {
             id: floor.id,
             nombre: floor.nombre,
             numero: floor.numero,
+            clave: floorKey(floor.numero),
             plano: urlsFor(db, links, "plano")[0] ?? null,
             vista: urlsFor(db, links, "vista")[0] ?? null,
             libres: units.filter((unit) => unit.floor_id === floor.id && unit.estado === "disponible").length,

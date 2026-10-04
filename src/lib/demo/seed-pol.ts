@@ -1,5 +1,7 @@
 import pol from "@/lib/demo/pol-data.json";
+import { exteriorCells } from "@/lib/demo/pol-faces";
 import { seedId } from "@/lib/domain/ids";
+import { VISTA_POR_ORIENTACION } from "@/lib/domain/vista";
 import type { AnalyticsEvent, Database, MediaAsset, MediaLink, Unit } from "@/lib/domain/types";
 
 const PROJECT = seedId(20);
@@ -73,11 +75,27 @@ export function applyPol(db: Database, now: Date) {
     pasos: ["Reservá con seña", "Firmá el boleto", "Pagá las cuotas", "Escriturá en la posesión"],
     recorrido: {
       paradas: [
-        { orden: 1, transicion_url: `${ROOT}/video/spin-clip-1_360-to-90.mp4`, vuelo_url: `${ROOT}/video/vuelo-top-1_from-360.mp4` },
-        { orden: 2, transicion_url: `${ROOT}/video/spin-clip-2_90-to-255.mp4`, vuelo_url: `${ROOT}/video/vuelo-top-2_from-90.mp4` },
-        { orden: 3, transicion_url: `${ROOT}/video/spin-clip-3_255-to-360.mp4`, vuelo_url: `${ROOT}/video/vuelo-top-3_from-255.mp4` },
+        {
+          orden: 1,
+          transicion_url: `${ROOT}/video/spin-clip-1_360-to-90.mp4`,
+          reversa_url: `${ROOT}/video/spin-clip-3_360-to-255.mp4`,
+          vuelo_url: `${ROOT}/video/vuelo-top-1_from-360.mp4`,
+        },
+        {
+          orden: 2,
+          transicion_url: `${ROOT}/video/spin-clip-2_90-to-255.mp4`,
+          reversa_url: `${ROOT}/video/spin-clip-1_90-to-360.mp4`,
+          vuelo_url: `${ROOT}/video/vuelo-top-2_from-90.mp4`,
+        },
+        {
+          orden: 3,
+          transicion_url: `${ROOT}/video/spin-clip-3_255-to-360.mp4`,
+          reversa_url: `${ROOT}/video/spin-clip-2_255-to-90.mp4`,
+          vuelo_url: `${ROOT}/video/vuelo-top-3_from-255.mp4`,
+        },
       ],
     },
+    vistas_orientacion: { ...VISTA_POR_ORIENTACION },
   };
   delete project.settings.brochure_url;
 
@@ -189,7 +207,7 @@ export function applyPol(db: Database, now: Date) {
       lead.unit_id = unitIds.get("101") ?? null;
     }
     const codigo = db.units.find((unit) => unit.id === lead.unit_id)?.codigo;
-    if (codigo) {
+    if (codigo && lead.mensaje) {
       lead.mensaje = lead.mensaje.replace(/\b\d+[A-Za-z*]+\b/g, (token) => (unitIds.has(token) ? token : codigo));
     }
   }
@@ -358,6 +376,27 @@ export function applyPol(db: Database, now: Date) {
       });
       overlayN += 1;
     }
+  }
+
+  const sceneOfAngle: Record<string, string> = { "360": seedId(7101), "90": seedId(7102), "255": seedId(7103) };
+  for (const cell of exteriorCells(pol.units)) {
+    const unitId = unitIds.get(cell.codigo);
+    const sceneId = sceneOfAngle[cell.angulo];
+    if (!unitId || !sceneId) continue;
+    db.overlays.push({
+      id: seedId(30000 + overlayN),
+      project_id: PROJECT,
+      contenedor: "scene",
+      contenedor_id: sceneId,
+      forma: "polygon",
+      puntos: cell.puntos,
+      vinculo_tipo: "unit",
+      vinculo_id: unitId,
+      etiqueta: cell.codigo,
+      estado: "published",
+      orden: overlayN,
+    });
+    overlayN += 1;
   }
 
   db.points_of_interest = pol.pois.map((poi, index) => ({

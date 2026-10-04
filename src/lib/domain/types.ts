@@ -115,10 +115,12 @@ export interface ProjectSettings {
     pdf?: boolean;
     ambientes?: boolean;
   };
-  /** Clips de salida de cada parada del spin. El video de la portada es el intro. */
+  /** Clips de cada parada del spin. El video de la portada es el intro. */
   recorrido?: {
-    paradas: { orden: number; transicion_url: string; vuelo_url: string }[];
+    paradas: { orden: number; transicion_url: string; reversa_url: string; vuelo_url: string }[];
   };
+  /** Foto de vista por orientación. Una cadena vacía oculta el default. */
+  vistas_orientacion?: Record<string, string>;
 }
 
 export interface ProjectContact {

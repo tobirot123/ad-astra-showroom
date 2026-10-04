@@ -1593,7 +1593,7 @@ export function addMedia(
     carpeta: string;
     unitId?: string | null;
     typologyId?: string | null;
-    rol?: "render" | "plano" | "portada" | "fachada";
+    rol?: "render" | "plano" | "portada" | "fachada" | "vista";
     now: Date;
   },
 ): OpResult {
@@ -1621,6 +1621,26 @@ export function addMedia(
   } else if (input.typologyId) {
     db.media_links.push({ id: uid(), media_id: id, entidad: "typology", entidad_id: input.typologyId, rol: input.rol ?? "render", orden: 1 });
   }
+  return noResult();
+}
+
+export function setUnitVista(db: Database, actor: Actor, unitId: string, choice: string, now: Date): OpResult {
+  const unit = db.units.find((item) => item.id === unitId);
+  if (!unit) throw new ServiceError("No encontramos la unidad.", 404);
+  requireProject(db, actor, unit.project_id);
+  requireAction(actor, "edit_units");
+  db.media_links = db.media_links.filter((link) => !(link.entidad === "unit" && link.entidad_id === unit.id && link.rol === "vista"));
+  if (choice === "sin") unit.vista = "sin";
+  else if (!choice) unit.vista = null;
+  else {
+    const media = db.media.find((item) => item.id === choice && item.project_id === unit.project_id);
+    if (!media) throw new ServiceError("No encontramos esa imagen.");
+    unit.vista = null;
+    db.media_links.push({ id: uid(), media_id: media.id, entidad: "unit", entidad_id: unit.id, rol: "vista", orden: 0 });
+  }
+  unit.version += 1;
+  unit.updated_at = now.toISOString();
+  unit.updated_by = actor.id;
   return noResult();
 }
 

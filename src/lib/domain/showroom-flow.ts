@@ -59,3 +59,16 @@ export function sortUnits<T extends FlowUnit>(units: T[], sort: FlowFilters["sor
   });
   return copy;
 }
+
+export function floorKey(numero: number) {
+  if (numero >= 20) return "techo";
+  if (numero === 19) return "terraza";
+  if (numero === 0) return "pb";
+  if (numero === -1) return "ss1";
+  if (numero === -2) return "ss2";
+  return String(numero);
+}
+
+export function sceneKey(nombre: string) {
+  return nombre.match(/\d+/)?.[0] ?? nombre;
+}

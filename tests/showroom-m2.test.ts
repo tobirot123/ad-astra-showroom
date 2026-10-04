@@ -16,6 +16,13 @@ describe("showroom M2", () => {
     const showroom = buildShowroom(data, "pol");
     expect(showroom?.scenes.map((scene) => scene.tipo)).toEqual(["portada", "exterior", "exterior", "exterior"]);
     expect(showroom?.scenes.find((scene) => scene.nombre === "360°")?.transicion_url).toContain("spin-clip-1");
+    expect(showroom?.scenes.find((scene) => scene.nombre === "360°")?.reversa_url).toContain("360-to-255");
+    const stops = ["360°", "90°", "255°"];
+    const counts = stops.map((nombre) => showroom?.scenes.find((scene) => scene.nombre === nombre)?.hotspots.length ?? 0);
+    expect(counts.every((count) => count > 0)).toBe(true);
+    expect(new Set(counts).size).toBeGreaterThan(1);
+    expect(showroom?.units.find((unit) => unit.codigo === "501")?.vista_url).toBeTruthy();
+    expect(showroom?.units.find((unit) => unit.codigo === "602")?.planta).toBe("6");
     expect(showroom?.buildings.map((building) => building.nombre)).toEqual(["POL"]);
     expect(showroom?.units.find((unit) => unit.codigo === "602")?.plano).toBeNull();
     expect(showroom?.units.find((unit) => unit.codigo === "18**")?.estado).toBe("pausa");

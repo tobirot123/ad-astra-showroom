@@ -59,6 +59,7 @@ export function MediaScreen() {
               <option value="plano">Plano</option>
               <option value="fachada">Fachada</option>
               <option value="portada">Portada</option>
+              <option value="vista">Vista</option>
             </select>
           </label>
           <label className="text-sm">

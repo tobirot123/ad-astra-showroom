@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { showQuote } from "@/lib/domain/finance";
 import { STATUS_COLOR, STATUS_LABEL, formatM2, formatNumber, formatUsd } from "@/lib/domain/format";
 import "./showroom.css";
-import { sortUnits, tourEmbed, unitMatches, videosToLoad, type FlowFilters } from "@/lib/domain/showroom-flow";
+import { floorKey, sceneKey, sortUnits, tourEmbed, unitMatches, videosToLoad, type FlowFilters } from "@/lib/domain/showroom-flow";
 import type { ShowroomData } from "@/lib/services/present";
 
 type Unit = ShowroomData["units"][number];
@@ -100,8 +100,10 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const [afterBridge, setAfterBridge] = useState<null | { kind: "scene"; index: number } | { kind: "floor"; id: string }>(null);
   const [photo, setPhoto] = useState(0);
   const [matchCursor, setMatchCursor] = useState(0);
+  const [tip, setTip] = useState<{ id: string; x: number; y: number } | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
+  const swipe = useRef<{ x: number; y: number } | null>(null);
   const moved = useRef(false);
 
   const scene = walk[sceneIndex] ?? walk[0];
@@ -151,14 +153,14 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     const stored = sessionStorage.getItem("adastra-lite");
     if (stored === "1") setLite(true);
     if (stored === "0") setLite(false);
-    const code = new URLSearchParams(window.location.search).get("unidad");
-    if (code) {
-      const unit = data.units.find((item) => item.codigo.toLowerCase() === code.toLowerCase());
-      if (unit) {
-        setEntered(true);
-        openOnPlan(unit, true);
-      }
+    applySearch(window.location.search);
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("escena") || params.has("planta") || params.has("unidad")) {
+      history.replaceState({ showroom: 1 }, "", window.location.href);
     }
+    const onPop = () => applySearch(window.location.search);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
     // La visita se registra una vez por carga.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.project.slug]);
@@ -178,11 +180,12 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         setUnitId(null);
       }
       if (sheet || unitId || !entered || phase !== "escena") return;
-      if (event.key === "ArrowRight") depart();
+      if (event.key === "ArrowRight") spin(1);
+      if (event.key === "ArrowLeft") spin(-1);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [entered, phase, sheet, unitId, walk.length, sceneIndex, lite]);
+  }, [entered, phase, sheet, unitId, walk.length, sceneIndex, lite, bridge, scene]);
 
   const activeId = active?.id;
   useEffect(() => {
@@ -233,10 +236,15 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     setSheet(null);
   }
 
-  function openFloor(nextFloorId: string) {
+  function openFloor(nextFloorId: string, historyMode: "push" | "replace" | "none" = "none") {
     setPhase("planta");
     setFloorId(nextFloorId);
     setUnitId(null);
+    setHighlightId(null);
+    if (historyMode !== "none") {
+      const floor = data.buildings.flatMap((item) => item.floors).find((item) => item.id === nextFloorId);
+      if (floor) pushLocation({ planta: floor.clave }, historyMode);
+    }
     setZoom(1);
     setPan({ x: 0, y: 0 });
     setSheet(null);
@@ -265,10 +273,30 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     setSent(false);
     setSheet(null);
     track("unit_view", unit, { origen });
+    if (unit.planta) pushLocation({ planta: unit.planta, unidad: unit.codigo });
+  }
+
+  function revealUnit(unit: Unit) {
+    if (unit.floor_id) {
+      setPhase("planta");
+      setFloorId(unit.floor_id);
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+    }
+    setHighlightId(unit.id);
+    setUnitId(unit.id);
+    setPhoto(0);
+    setSent(false);
+    setSheet(null);
+    track("unit_view", unit, { origen: "fachada" });
+    if (unit.planta) {
+      pushLocation({ planta: unit.planta });
+      pushLocation({ planta: unit.planta, unidad: unit.codigo });
+    }
   }
 
   function zones(): Overlay[] {
-    if (!entered || !scene) return [];
+    if (!entered || !scene || bridge) return [];
     if (phase === "planta" && floorId) {
       return data.overlays.filter((overlay) => overlay.contenedor === "floor" && overlay.contenedor_id === floorId);
     }
@@ -276,27 +304,30 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     if (scene.tipo === "masterplan") {
       return data.overlays.filter((overlay) => overlay.contenedor === "masterplan" && overlay.contenedor_id === scene.building_id);
     }
-    if (scene.tipo === "exterior") {
-      return data.overlays.filter((overlay) => overlay.contenedor === "facade" && overlay.contenedor_id === scene.building_id);
-    }
+    if (scene.tipo === "exterior") return scene.hotspots;
     return [];
   }
 
-  function onZone(overlay: Overlay) {
-    if (moved.current) return;
+  function onZone(overlay: Overlay, event?: { clientX: number; clientY: number }) {
+    if (moved.current || bridge) return;
     if (overlay.vinculo_tipo === "building" && overlay.vinculo_id) {
       goBuilding(overlay.vinculo_id);
       return;
     }
     const unit = data.units.find((item) => item.id === overlay.vinculo_id);
     if (!unit) return;
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    if (phase !== "planta" && coarse && tip?.id !== overlay.id && event) {
+      setTip({ id: overlay.id, x: event.clientX, y: event.clientY });
+      return;
+    }
+    setTip(null);
     const onPlan = phase === "planta" || scene?.tipo === "masterplan";
     if (onPlan) {
       chooseUnit(unit, phase === "planta" ? "planta" : "masterplan");
       return;
     }
-    if (unit.floor_id) openFloor(unit.floor_id);
-    setHighlightId(unit.id);
+    revealUnit(unit);
   }
 
   function matched(unitIdValue: string | null) {
@@ -373,11 +404,71 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     });
   }
 
+  function pushLocation(loc: { escena?: string; planta?: string; unidad?: string }, mode: "push" | "replace" = "push") {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("escena");
+    url.searchParams.delete("planta");
+    url.searchParams.delete("unidad");
+    if (loc.unidad && loc.planta) {
+      url.searchParams.set("planta", loc.planta);
+      url.searchParams.set("unidad", loc.unidad);
+    } else if (loc.planta) url.searchParams.set("planta", loc.planta);
+    else if (loc.escena) url.searchParams.set("escena", loc.escena);
+    const state = { showroom: 1 };
+    if (mode === "replace") history.replaceState(state, "", url);
+    else history.pushState(state, "", url);
+  }
+
+  function applySearch(search: string) {
+    const params = new URLSearchParams(search);
+    const unidad = params.get("unidad");
+    const planta = params.get("planta");
+    const escena = params.get("escena");
+    if (unidad) {
+      const unit = data.units.find((item) => item.codigo.toLowerCase() === unidad.toLowerCase());
+      if (!unit) return;
+      setEntered(true);
+      if (unit.floor_id) {
+        setPhase("planta");
+        setFloorId(unit.floor_id);
+      }
+      setHighlightId(unit.id);
+      setUnitId(unit.id);
+      setPhoto(0);
+      setSheet(null);
+      return;
+    }
+    setUnitId(null);
+    setHighlightId(null);
+    if (planta) {
+      const floor = data.buildings.flatMap((item) => item.floors).find((item) => item.clave === planta);
+      if (!floor) return;
+      setEntered(true);
+      setPhase("planta");
+      setFloorId(floor.id);
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      return;
+    }
+    if (escena) {
+      const index = walk.findIndex((item) => sceneKey(item.nombre) === escena);
+      setEntered(true);
+      setPhase("escena");
+      if (index >= 0) setSceneIndex(index);
+      return;
+    }
+    setEntered(false);
+    setPhase("escena");
+  }
+
   function enter() {
     setEntered(true);
     setPhase("escena");
     setSceneIndex(0);
+    setUnitId(null);
     setSheet(null);
+    const first = walk[0];
+    if (first) pushLocation({ escena: sceneKey(first.nombre) });
     if (!lite && cover?.video_url) {
       setAfterBridge(null);
       setBridge(cover.video_url);
@@ -392,20 +483,41 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     if (job?.kind === "scene") {
       setSceneIndex(job.index);
       setPhase("escena");
+      const next = walk[job.index];
+      if (next) pushLocation({ escena: sceneKey(next.nombre) }, "replace");
     }
-    if (job?.kind === "floor") openFloor(job.id);
+    if (job?.kind === "floor") openFloor(job.id, "push");
   }
 
-  function depart() {
-    if (!scene) return;
-    const next = (sceneIndex + 1) % walk.length;
-    if (!lite && scene.transicion_url) {
+  function spin(direction: 1 | -1) {
+    if (!scene || bridge) return;
+    const next = (sceneIndex + direction + walk.length) % walk.length;
+    const clip = direction > 0 ? scene.transicion_url : scene.reversa_url;
+    setTip(null);
+    if (!lite && clip) {
       setAfterBridge({ kind: "scene", index: next });
-      setBridge(scene.transicion_url);
+      setBridge(clip);
       return;
     }
     setSceneIndex(next);
     setPhase("escena");
+    const target = walk[next];
+    if (target) pushLocation({ escena: sceneKey(target.nombre) }, "replace");
+  }
+
+  function stepBack() {
+    if (window.history.state?.showroom) {
+      history.back();
+      return;
+    }
+    if (unitId) {
+      setUnitId(null);
+      if (floor) pushLocation({ planta: floor.clave }, "replace");
+      return;
+    }
+    setPhase("escena");
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
   }
 
   function goPlans() {
@@ -416,7 +528,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       setBridge(scene.vuelo_url);
       return;
     }
-    openFloor(top.id);
+    openFloor(top.id, "push");
   }
 
   const image = !entered ? cover?.imagen_url ?? data.facade : phase === "planta" ? floor?.plano ?? scene?.imagen_url ?? data.facade : scene?.imagen_url ?? data.facade;
@@ -436,14 +548,16 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         zoom={phase === "planta" ? zoom : 1}
         pan={phase === "planta" ? pan : { x: 0, y: 0 }}
         video={bridge ?? (playing && videos.current ? videos.current : null)}
+        poster={image}
         onVideoDone={() => {
           if (bridge) finishBridge();
           else setPlaying(false);
         }}
         onPointerDown={(event) => {
+          moved.current = false;
+          if (phase === "escena" && entered && !bridge) swipe.current = { x: event.clientX, y: event.clientY };
           if (phase !== "planta" || zoom === 1) return;
           drag.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y };
-          moved.current = false;
         }}
         onPointerMove={(event) => {
           if (!drag.current) return;
@@ -452,8 +566,17 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           if (Math.abs(dx) + Math.abs(dy) > 4) moved.current = true;
           setPan({ x: drag.current.px + dx, y: drag.current.py + dy });
         }}
-        onPointerUp={() => {
+        onPointerUp={(event) => {
           drag.current = null;
+          const start = swipe.current;
+          swipe.current = null;
+          if (!start || phase !== "escena" || bridge) return;
+          const dx = event.clientX - start.x;
+          const dy = event.clientY - start.y;
+          if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+            moved.current = true;
+            spin(dx < 0 ? 1 : -1);
+          }
         }}
         onWheel={(event) => {
           if (phase !== "planta") return;
@@ -469,7 +592,13 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           const aerial = overlay.vinculo_tipo === "building";
           const [cx, cy] = centroid(overlay.puntos);
           return (
-            <g key={overlay.id} onClick={(event) => { event.stopPropagation(); onZone(overlay); }} className="cursor-pointer">
+            <g
+              key={overlay.id}
+              onClick={(event) => { event.stopPropagation(); onZone(overlay, event); }}
+              onMouseEnter={(event) => { if (phase === "escena" && overlay.vinculo_tipo === "unit") setTip({ id: overlay.id, x: event.clientX, y: event.clientY }); }}
+              onMouseLeave={() => setTip((current) => current?.id === overlay.id ? null : current)}
+              className="cursor-pointer"
+            >
               <polygon
                 points={overlay.puntos.map((point) => point.join(",")).join(" ")}
                 fill={aerial ? "#c4a574" : color}
@@ -490,9 +619,21 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           );
         })}
       </Stage>
-      {(scene?.transicion_url || videos.next) && (
-        <video src={scene?.transicion_url || videos.next || undefined} preload="auto" muted playsInline className="pointer-events-none absolute h-px w-px opacity-0" />
+      {phase === "escena" && scene?.transicion_url && (
+        <video src={scene.transicion_url} preload="auto" muted playsInline className="pointer-events-none absolute h-px w-px opacity-0" />
       )}
+      {phase === "escena" && scene?.reversa_url && (
+        <video src={scene.reversa_url} preload="auto" muted playsInline className="pointer-events-none absolute h-px w-px opacity-0" />
+      )}
+      {phase === "escena" && walk[(sceneIndex + 1) % walk.length]?.imagen_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={walk[(sceneIndex + 1) % walk.length]?.imagen_url} alt="" className="pointer-events-none absolute h-px w-px opacity-0" />
+      )}
+      {phase === "escena" && walk[(sceneIndex - 1 + walk.length) % walk.length]?.imagen_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={walk[(sceneIndex - 1 + walk.length) % walk.length]?.imagen_url} alt="" className="pointer-events-none absolute h-px w-px opacity-0" />
+      )}
+      {tip && phase === "escena" && <HoverTip tip={tip} overlays={scene?.hotspots ?? []} units={data.units} />}
 
       <button
         type="button"
@@ -544,7 +685,10 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       )}
 
       {entered && phase === "escena" && walk.length > 1 && (
-        <button type="button" aria-label="Girar" className="absolute left-4 top-1/2 z-30 -translate-y-1/2 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-[#1c1915] shadow-lg" onClick={depart}>Girar ›</button>
+        <>
+          <button type="button" aria-label="Girar a la izquierda" className="spin-btn absolute left-4 top-1/2 z-30 -translate-y-1/2" onClick={() => spin(-1)}>‹</button>
+          <button type="button" aria-label="Girar a la derecha" className="spin-btn absolute right-20 top-1/2 z-30 -translate-y-1/2" onClick={() => spin(1)}>›</button>
+        </>
       )}
 
       {showRail && tower && (
@@ -557,7 +701,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
                 type="button"
                 title={`${item.libres} libres`}
                 className={`grid min-w-11 place-items-center rounded-full px-1 py-1 leading-none ${current ? "bg-white text-[#1c1915]" : "text-white"}`}
-                onClick={() => openFloor(item.id)}
+                onClick={() => openFloor(item.id, phase === "planta" ? "replace" : "push")}
               >
                 <span className="text-sm font-semibold">{floorMark(item.nombre, item.numero)}</span>
                 <span className={`text-[10px] ${current ? "text-[#6b6258]" : "text-white/75"}`}>{item.libres}</span>
@@ -591,7 +735,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
 
       {phase === "planta" && (
         <div className="absolute bottom-5 left-4 z-20 flex items-center gap-2">
-          <button type="button" className="rounded-full bg-white px-3 py-1 text-[#1c1915]" onClick={() => { setPhase("escena"); setZoom(1); setPan({ x: 0, y: 0 }); }}>Volver</button>
+          <button type="button" className="rounded-full bg-white px-3 py-1 text-[#1c1915]" onClick={stepBack}>Volver</button>
           <button type="button" className="rounded-full bg-white/90 px-3 py-1 text-[#1c1915]" onClick={() => setZoom((value) => Math.max(1, value - 0.25))}>−</button>
           <button type="button" className="rounded-full bg-white/90 px-3 py-1 text-[#1c1915]" onClick={() => setZoom((value) => Math.min(4, value + 0.25))}>+</button>
           {zoom > 1 && floor?.plano && (
@@ -610,11 +754,12 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           project={data.project}
           plans={data.plans}
           fallback={data.facade}
+          plantaImagen={data.buildings.flatMap((item) => item.floors).find((item) => item.id === active.floor_id)?.plano ?? null}
           compared={compare.includes(active.id)}
           sent={sent}
           sending={sending}
           error={error}
-          onClose={() => setUnitId(null)}
+          onClose={stepBack}
           onWhatsapp={() => whatsapp(active)}
           onShare={() => void share(active)}
           onCompare={() => toggleCompare(active.id)}
@@ -852,10 +997,17 @@ function sheetTitle(sheet: Sheet) {
   return titles[sheet ?? ""] ?? "";
 }
 
-function clipPoster(src: string) {
-  const match = src.match(/^(.*\/demo\/pol\/video)\/([^/]+)\.mp4$/);
-  if (!match) return undefined;
-  return `${match[1]}/posters/${match[2]}_first.webp`;
+function HoverTip({ tip, overlays, units }: { tip: { id: string; x: number; y: number }; overlays: Overlay[]; units: Unit[] }) {
+  const overlay = overlays.find((item) => item.id === tip.id);
+  const unit = units.find((item) => item.id === overlay?.vinculo_id);
+  if (!unit) return null;
+  return (
+    <div className="unit-tip" style={{ left: tip.x, top: tip.y }}>
+      <p className="font-medium">{unit.codigo} · {STATUS_LABEL[unit.estado]}</p>
+      <p>{unit.tipologia}{unit.m2_totales != null ? ` · ${formatM2(unit.m2_totales)} m²` : ""}</p>
+      <p>{unit.mostrar_precio && unit.precio != null ? formatUsd(unit.precio) : "Consultar"}</p>
+    </div>
+  );
 }
 
 function Stage({
@@ -863,8 +1015,9 @@ function Stage({
   cover,
   zoom,
   pan,
-  video,
-  children,
+        video,
+        poster,
+        children,
   stageRef,
   onVideoDone,
   onPointerDown,
@@ -877,16 +1030,24 @@ function Stage({
   zoom: number;
   pan: { x: number; y: number };
   video: string | null;
+  poster?: string;
   children?: React.ReactNode;
   stageRef: React.RefObject<HTMLDivElement | null>;
   onVideoDone: () => void;
   onPointerDown: (event: React.PointerEvent) => void;
   onPointerMove: (event: React.PointerEvent) => void;
-  onPointerUp: () => void;
+  onPointerUp: (event: React.PointerEvent) => void;
   onWheel: (event: WheelEvent) => void;
 }) {
   const [box, setBox] = useState({ w: 1, h: 1 });
   const [natural, setNatural] = useState({ w: 16, h: 9 });
+  const doneRef = useRef(onVideoDone);
+  doneRef.current = onVideoDone;
+  useEffect(() => {
+    if (!video) return;
+    const timer = window.setTimeout(() => doneRef.current(), 20000);
+    return () => window.clearTimeout(timer);
+  }, [video]);
   useEffect(() => {
     const node = stageRef.current;
     if (!node) return;
@@ -939,18 +1100,22 @@ function Stage({
           <video
             key={video}
             src={video}
-            poster={clipPoster(video)}
+            poster={poster}
             autoPlay
             muted
             playsInline
             preload="auto"
             className="clip absolute inset-0 h-full w-full object-fill"
-            onPlaying={(event) => event.currentTarget.dataset.ready = "1"}
+            onCanPlay={(event) => {
+              const node = event.currentTarget;
+              void node.play().catch(() => doneRef.current());
+            }}
+            onPlaying={(event) => { event.currentTarget.dataset.ready = "1"; }}
             onEnded={onVideoDone}
             onError={onVideoDone}
           />
         )}
-        <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
+        <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="hotspots absolute inset-0 h-full w-full">
           {children}
         </svg>
       </div>
@@ -1127,6 +1292,7 @@ function UnitPanel({
   project,
   plans,
   fallback,
+  plantaImagen,
   compared,
   sent,
   sending,
@@ -1146,6 +1312,7 @@ function UnitPanel({
   project: ShowroomData["project"];
   plans: ShowroomData["plans"];
   fallback: string;
+  plantaImagen: string | null;
   compared: boolean;
   sent: boolean;
   sending: boolean;
@@ -1162,9 +1329,8 @@ function UnitPanel({
   onLead: (form: FormData) => void;
 }) {
   const ficha = project.ficha;
-  const ownPhotos = unit.renders.length ? unit.renders : unit.plano ? [unit.plano] : [];
-  const sinPlano = ownPhotos.length === 0;
-  const photos = sinPlano ? [fallback] : ownPhotos;
+  const sinPlano = !unit.plano;
+  const photos = unit.renders.length ? unit.renders : unit.plano ? [unit.plano] : plantaImagen ? [plantaImagen] : [fallback];
   const current = photos[photo] ?? photos[0];
   const [planId, setPlanId] = useState(plans[0]?.id ?? "");
   const [buyer, setBuyer] = useState("");
@@ -1244,7 +1410,16 @@ function UnitPanel({
         <span className="inline-block rounded-full px-2 py-0.5 text-xs text-white" style={{ background: STATUS_COLOR[unit.estado] }}>{STATUS_LABEL[unit.estado]}</span>
         <h2 className="font-serif text-4xl">{unit.codigo}</h2>
         <p className="text-sm text-[#6b6258]">{unit.tipologia} · {unit.torre} · {unit.piso}</p>
-        {sinPlano && <p className="text-sm text-[#6b6258]">Esta unidad no tiene plano cargado. Te mostramos el edificio.</p>}
+        {sinPlano && <p className="text-sm text-[#6b6258]">Esta unidad no tiene un plano propio. La marcamos en la planta.</p>}
+        <div>
+          <p className="text-xs uppercase tracking-[0.16em] text-[#6b6258]">Vista</p>
+          {unit.vista_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={unit.vista_url} alt={unit.orientacion ? `Vista al ${unit.orientacion}` : "Vista de la unidad"} className="mt-2 h-36 w-full rounded-2xl object-cover" style={{ objectPosition: unit.vista_encuadre }} />
+          ) : (
+            <p className="mt-2 rounded-2xl bg-[#f4efe6] px-3 py-6 text-sm text-[#6b6258]">Esta unidad todavía no tiene una vista cargada.</p>
+          )}
+        </div>
         <p className="font-serif text-3xl">{ficha.precio && unit.mostrar_precio && unit.precio != null ? formatUsd(unit.precio) : "Consultar"}</p>
         <dl className="grid grid-cols-2 gap-2 text-sm">
           {unit.m2_totales != null && <div><dt className="text-[#6b6258]">Superficie</dt><dd>{formatM2(unit.m2_totales)} m²</dd></div>}

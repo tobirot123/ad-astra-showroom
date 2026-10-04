@@ -37,6 +37,7 @@ import {
   sweep,
   undoChange,
   updateLead,
+  setUnitVista,
   updateProject,
   updateUnit,
   type OpResult,
@@ -109,6 +110,8 @@ function run(db: Database, actor: Actor, op: string, body: Record<string, unknow
   switch (op) {
     case "update_unit":
       return updateUnit(db, actor, String(body.unitId), (body.patch ?? {}) as never, now);
+    case "set_unit_vista":
+      return setUnitVista(db, actor, String(body.unitId), String(body.choice ?? ""), now);
     case "direct_status":
       return directStatus(db, actor, String(body.unitId), body.estado as UnitStatus, Boolean(body.confirm), now);
     case "revert_inherit":

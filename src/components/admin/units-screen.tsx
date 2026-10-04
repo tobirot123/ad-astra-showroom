@@ -33,6 +33,10 @@ export function UnitsScreen() {
 
   const floorName = new Map(data.floors.map((floor) => [floor.id, floor.nombre]));
   const typName = new Map(data.typologies.map((typ) => [typ.id, typ.nombre]));
+  function vistaChoice(unitId: string, vista: string | null) {
+    if (vista === "sin") return "sin";
+    return (data?.media_links ?? []).find((link) => link.entidad === "unit" && link.entidad_id === unitId && link.rol === "vista")?.media_id ?? "";
+  }
 
   async function patch(unitId: string, body: Record<string, unknown>, version: number) {
     await mutate({ op: "update_unit", unitId, patch: { ...body, version } });
@@ -102,7 +106,7 @@ export function UnitsScreen() {
           <thead className="text-left text-[#6b6258]">
             <tr>
               <th className="p-3"></th>
-              <th>Unidad</th><th>Piso</th><th>Tipología</th><th>m² cub.</th><th>m² tot.</th><th>Orient.</th><th>Precio</th><th>Estado</th><th>Cochera</th>
+              <th>Unidad</th><th>Piso</th><th>Tipología</th><th>m² cub.</th><th>m² tot.</th><th>Orient.</th><th>Vista</th><th>Precio</th><th>Estado</th><th>Cochera</th>
             </tr>
           </thead>
           <tbody>
@@ -137,6 +141,21 @@ export function UnitsScreen() {
                   />
                 </td>
                 <td>{unit.orientacion}</td>
+                <td>
+                  {editable ? (
+                    <select
+                      value={vistaChoice(unit.id, unit.vista)}
+                      onChange={(event) => void mutate({ op: "set_unit_vista", unitId: unit.id, choice: event.target.value })}
+                      className="max-w-36 rounded border border-transparent bg-transparent text-xs"
+                    >
+                      <option value="">Según orientación</option>
+                      <option value="sin">Sin vista</option>
+                      {data.media.filter((item) => item.tipo !== "video").map((item) => (
+                        <option key={item.id} value={item.id}>{item.nombre}</option>
+                      ))}
+                    </select>
+                  ) : unit.vista === "sin" ? "Sin vista" : "Según orientación"}
+                </td>
                 <td>
                   {prices ? (
                     <input
