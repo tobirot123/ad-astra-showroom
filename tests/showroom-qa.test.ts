@@ -18,14 +18,17 @@ import { buildSeed } from "@/lib/demo/seed";
 import { buildShowroom } from "@/lib/services/present";
 
 describe("showroom QA", () => {
-  it("cada pastilla de la planta 4 cae dentro de su unidad", () => {
-    const floor = pol.polygons["04"] as Record<string, [number, number][]>;
-    const entries = Object.entries(floor);
-    expect(entries.length).toBe(6);
-    for (const [code, points] of entries) {
-      const [x, y] = interiorPoint(points);
-      const hits = entries.filter(([, shape]) => pointInPolygon(shape, x, y)).map(([id]) => id);
-      expect(hits[hits.length - 1]).toBe(code);
+  it("cada pastilla cae dentro de su unidad", () => {
+    const polygons = pol.polygons as Record<string, Record<string, [number, number][]>>;
+    for (const floorKey of ["03", "04", "05", "06", "07", "08", "09"]) {
+      const entries = Object.entries(polygons[floorKey] ?? {});
+      expect(entries.length, floorKey).toBeGreaterThan(3);
+      for (const [code, points] of entries) {
+        const [x, y] = interiorPoint(points);
+        expect(pointInPolygon(points, x, y), `${floorKey} ${code}`).toBe(true);
+        const hits = entries.filter(([, shape]) => pointInPolygon(shape, x, y)).map(([id]) => id);
+        expect(hits[hits.length - 1], `${floorKey} ${code}`).toBe(code);
+      }
     }
   });
 
@@ -49,8 +52,7 @@ describe("showroom QA", () => {
       const m2Sum = list.reduce((sum, item) => sum + item.m2, 0);
       for (const item of list) {
         const ratio = polygonArea(item.points) / areaSum / (item.m2 / m2Sum);
-        // El estar oeste de los pisos 5 a 8 está dibujado más grande que el m² ponderado.
-        expect(Math.abs(ratio - 1), `${floor} ${item.codigo} ${ratio.toFixed(3)}`).toBeLessThanOrEqual(0.45);
+        expect(Math.abs(ratio - 1), `${floor} ${item.codigo} ${ratio.toFixed(3)}`).toBeLessThanOrEqual(0.25);
       }
     }
   });
@@ -84,10 +86,13 @@ describe("showroom QA", () => {
   });
 
   it("el hero de la galería no es un baño y el recorrido falso no se publica", () => {
-    expect(galleryHeroRank("/demo/pol/interiores/int-12_304.webp")).toBeLessThan(galleryHeroRank("/demo/pol/interiores/int-04_101-201.webp"));
+    expect(galleryHeroRank("/demo/pol/interiores/int-09_110-210.webp")).toBeLessThan(galleryHeroRank("/demo/pol/interiores/int-12_304.webp"));
+    expect(galleryHeroRank("/demo/pol/interiores/int-12_304.webp")).toBeGreaterThanOrEqual(70);
     const showroom = buildShowroom(buildSeed(new Date("2026-10-04T12:00:00.000Z")), "pol");
     const unit = showroom?.units.find((item) => item.codigo === "406");
-    expect(unit?.galeria[0]).toContain("int-12_");
+    expect(unit?.galeria[0]).toContain("int-09_");
+    const uno = showroom?.units.find((item) => item.codigo === "404");
+    expect(uno?.galeria[0] ?? "").not.toMatch(/int-12_|int-04_|int-06_|int-08_/);
     expect(unit?.tour).toBeNull();
   });
 

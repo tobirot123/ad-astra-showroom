@@ -1090,6 +1090,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
               <p className="mb-2 text-sm font-medium">Área</p>
               <input type="range" min={areaBound.min} max={areaBound.max} step="0.1" value={areaMin} onChange={(event) => setArea({ min: Math.min(Number(event.target.value), areaMax), max: areaMax })} className="w-full" />
               <input type="range" min={areaBound.min} max={areaBound.max} step="0.1" value={areaMax} onChange={(event) => setArea({ min: areaMin, max: Math.max(Number(event.target.value), areaMin) })} className="mt-1 w-full" />
+              <p className="mt-2 text-sm text-[#5c564e]">{areaMin.toFixed(1)} m² – {areaMax.toFixed(1)} m²</p>
               <p className="mb-1 mt-3 text-sm font-medium">Disponibilidad</p>
               {([["vendida", "Vendido"], ["reservada", "Reservado"], ["disponible", "Disponible"]] as const).map(([value, label]) => (
                 <label key={value} className="radio" onClick={() => setFilters({ ...filters, estado: filters.estado === value ? "todos" : value })}>
@@ -1131,7 +1132,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         <p className="pointer-events-none absolute right-4 top-[4.6rem] z-20 rounded-lg bg-[#1c2733]/80 px-3 py-1 text-xs text-white">Disponibilidad · Departamentos</p>
       )}
 
-      {entered && !active && phase === "escena" && walk.length > 1 && (
+      {entered && !active && phase === "escena" && walk.length > 1 && !filterPop && (
         <>
           <button type="button" aria-label="Girar a la izquierda" className="spin-btn absolute left-3 top-1/2 z-30 -translate-y-1/2" onClick={() => spin(-1)}>‹</button>
           <button type="button" aria-label="Girar a la derecha" className="spin-btn absolute right-3 top-1/2 z-30 -translate-y-1/2" onClick={() => spin(1)}>›</button>
@@ -1179,10 +1180,8 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           fallback={data.facade}
           plantaImagen={data.buildings.flatMap((item) => item.floors).find((item) => item.id === active.floor_id)?.plano ?? null}
           footprint={data.overlays.find((overlay) => overlay.contenedor === "floor" && overlay.vinculo_id === active.id)?.puntos ?? null}
-          vistaSrc={active.vista_propia ? active.vista_url : (data.scenes.find((item) => item.hotspots.some((hotspot) => hotspot.vinculo_id === active.id))?.imagen_url ?? active.vista_url)}
-          vistaPoints={(active.vista_propia
-            ? data.scenes.find((item) => item.imagen_url === active.vista_url)
-            : data.scenes.find((item) => item.hotspots.some((hotspot) => hotspot.vinculo_id === active.id)))
+          vistaSrc={active.vista_propia ? active.vista_url : (data.scenes.find((item) => item.imagen_url === active.vista_url)?.imagen_url ?? data.scenes.find((item) => item.hotspots.some((hotspot) => hotspot.vinculo_id === active.id))?.imagen_url ?? active.vista_url)}
+          vistaPoints={(data.scenes.find((item) => item.imagen_url === active.vista_url) ?? data.scenes.find((item) => item.hotspots.some((hotspot) => hotspot.vinculo_id === active.id)))
             ?.hotspots.find((hotspot) => hotspot.vinculo_id === active.id)?.puntos ?? null}
           sent={sent}
           sending={sending}

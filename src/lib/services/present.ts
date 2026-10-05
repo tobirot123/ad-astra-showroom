@@ -4,7 +4,7 @@ import type { Actor, Database, Project, Unit } from "@/lib/domain/types";
 import { cashPrice, financedQuote, hoursLeftLabel, pendingBadge, publicStatus } from "@/lib/services/engine";
 import { floorKey, isRealTour } from "@/lib/domain/showroom-flow";
 import { withEffectiveAreas } from "@/lib/domain/units";
-import { galleryHeroRank } from "@/lib/domain/gallery-rank";
+import { galleryHeroRank, illustrativeInterior } from "@/lib/domain/gallery-rank";
 import { encuadreVista, vistaPorOrientacion } from "@/lib/domain/vista";
 import { celdasDeGrilla, plantaDePiso, recortarPoligono } from "@/lib/domain/fachada-grilla";
 
@@ -94,7 +94,11 @@ export function buildShowroom(db: Database, slug: string) {
       const mediaOf = (rol: string) => urlsFor(db, links, rol);
       const galeria = mediaOf("galeria")
         .map((url, index) => ({ url, index }))
-        .sort((a, b) => galleryHeroRank(a.url) - galleryHeroRank(b.url) || a.index - b.index)
+        .sort((a, b) => {
+          const sharedA = illustrativeInterior(a.url, unit.codigo) ? 1 : 0;
+          const sharedB = illustrativeInterior(b.url, unit.codigo) ? 1 : 0;
+          return sharedA - sharedB || galleryHeroRank(a.url) - galleryHeroRank(b.url) || a.index - b.index;
+        })
         .map((item) => item.url);
       const overlay = db.overlays.find(
         (o) => o.project_id === project.id && o.estado === "published" && o.contenedor === "facade" && o.vinculo_tipo === "unit" && o.vinculo_id === unit.id,

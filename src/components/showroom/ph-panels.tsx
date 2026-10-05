@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PoiMap } from "@/components/maps/poi-map";
+import { illustrativeInterior } from "@/lib/domain/gallery-rank";
 import { showQuote } from "@/lib/domain/finance";
 import { STATUS_COLOR, STATUS_LABEL, formatM2, formatNumber, formatUsd } from "@/lib/domain/format";
 import { poiLabel } from "@/lib/domain/poi";
@@ -659,6 +660,7 @@ export function UnitSheet({
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={currentPhoto} alt="" className="fit" />
+            {illustrativeInterior(currentPhoto, unit.codigo) && <p className="vista-caption ilustrativa">Imagen ilustrativa</p>}
             <Arrows index={photo} total={gallery.length} onChange={setPhoto} />
           </>
         )}
@@ -668,6 +670,7 @@ export function UnitSheet({
             alt={vistaFallback ? "Ubicación en el edificio" : unit.orientacion ? `Vista al ${unit.orientacion}` : "Vista"}
             points={vistaPoints}
             color={tone.color}
+            marker={vistaFallback ? unit.codigo : null}
             caption={vistaFallback ? "Ubicación en el edificio" : null}
           />
         )}
@@ -693,7 +696,7 @@ export function UnitSheet({
   );
 }
 
-function PlacedPhoto({ src, alt, points, color, caption }: { src: string; alt: string; points: [number, number][] | null; color: string; caption: string | null }) {
+function PlacedPhoto({ src, alt, points, color, caption, marker }: { src: string; alt: string; points: [number, number][] | null; color: string; caption: string | null; marker?: string | null }) {
   const frame = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [natural, setNatural] = useState({ w: 16, h: 9 });
@@ -729,8 +732,16 @@ function PlacedPhoto({ src, alt, points, color, caption }: { src: string; alt: s
       />
       {mark && width > 0 && (
         <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="absolute" style={{ left, top, width, height }}>
-          <polygon points={mark.map((point) => point.join(",")).join(" ")} fill={color} fillOpacity="0.72" stroke="#fff" strokeWidth="0.006" />
-          <circle cx={cx} cy={cy} r="0.014" fill="#fff" stroke={color} strokeWidth="0.005" />
+          <polygon points={mark.map((point) => point.join(",")).join(" ")} fill={color} fillOpacity="0.55" stroke="#fff" strokeWidth="0.004" />
+          {marker ? (
+            <>
+              <line x1={cx} y1={Math.max(0.012, cy - 0.045)} x2={cx} y2={cy} stroke="#fff" strokeWidth="0.003" />
+              <circle cx={cx} cy={Math.max(0.012, cy - 0.045)} r="0.006" fill="#fff" stroke={color} strokeWidth="0.002" />
+              <text x={cx} y={Math.max(0.01, cy - 0.058)} textAnchor="middle" fill="#fff" fontSize="0.018" fontWeight="700">{marker}</text>
+            </>
+          ) : (
+            <circle cx={cx} cy={cy} r="0.006" fill="#fff" stroke={color} strokeWidth="0.002" />
+          )}
         </svg>
       )}
       {caption && <p className="vista-caption">{caption}</p>}
