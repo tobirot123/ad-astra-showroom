@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { PoiMap } from "@/components/maps/poi-map";
+import { distanceMeters } from "@/lib/domain/geo";
 import { can } from "@/lib/domain/permissions";
+import { POI_CATEGORIES, poiLabel } from "@/lib/domain/poi";
 import type { Tour } from "@/lib/domain/types";
 import { useAdmin } from "@/components/admin/provider";
 
@@ -9,7 +12,7 @@ const PROVEEDORES: Tour["proveedor"][] = ["url", "matterport", "kuula", "3dvista
 
 export function LugaresScreen() {
   const { data, mutate } = useAdmin();
-  const [poi, setPoi] = useState({ id: "", nombre: "", categoria: "acceso", lat: "", lng: "", distancia_m: "", descripcion: "" });
+  const [poi, setPoi] = useState({ id: "", nombre: "", categoria: "otro", lat: "", lng: "", distancia_m: "", descripcion: "" });
   const [tour, setTour] = useState({ id: "", titulo: "", url: "", proveedor: "url" as Tour["proveedor"], entidad: "typology" as Tour["entidad"], entidad_id: "" });
   if (!data?.project) return null;
   const admin = can(data.actor, "edit_project");
@@ -39,7 +42,7 @@ export function LugaresScreen() {
                 distancia_m: item.distancia_m == null ? "" : String(item.distancia_m),
                 descripcion: item.descripcion,
               })}>
-                {item.nombre} · {item.distancia_m != null ? `${item.distancia_m} m` : item.categoria}
+                {item.nombre} · {poiLabel(item.categoria)}{item.distancia_m != null ? ` · ${item.distancia_m} m` : ""}
               </button>
               {admin && <button className="text-[#9a6240]" onClick={() => void mutate({ op: "delete_poi", poiId: item.id })}>Quitar</button>}
             </li>
@@ -66,8 +69,41 @@ export function LugaresScreen() {
             }}
           >
             <h2 className="font-serif text-2xl">Punto de interés</h2>
+            {data.project.lat != null && data.project.lng != null && (
+              <>
+                <PoiMap
+                  lat={data.project.lat}
+                  lng={data.project.lng}
+                  nombre={data.project.nombre}
+                  pois={data.points_of_interest}
+                  selectedId={poi.id || null}
+                  onSelect={(id) => {
+                    const item = data.points_of_interest.find((point) => point.id === id);
+                    if (!item) return;
+                    setPoi({
+                      id: item.id,
+                      nombre: item.nombre,
+                      categoria: item.categoria,
+                      lat: item.lat == null ? "" : String(item.lat),
+                      lng: item.lng == null ? "" : String(item.lng),
+                      distancia_m: item.distancia_m == null ? "" : String(item.distancia_m),
+                      descripcion: item.descripcion,
+                    });
+                  }}
+                  onPick={(lat, lng) => setPoi((current) => ({
+                    ...current,
+                    lat: lat.toFixed(6),
+                    lng: lng.toFixed(6),
+                    distancia_m: String(distanceMeters(data.project!.lat!, data.project!.lng!, lat, lng)),
+                  }))}
+                />
+                <p className="text-xs text-[#6b6258]">Tocá el mapa para marcar el punto. La distancia se calcula sola desde el edificio.</p>
+              </>
+            )}
             <input value={poi.nombre} onChange={(event) => setPoi({ ...poi, nombre: event.target.value })} placeholder="Nombre" required className="w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
-            <input value={poi.categoria} onChange={(event) => setPoi({ ...poi, categoria: event.target.value })} placeholder="Categoría" className="w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
+            <select value={poi.categoria} onChange={(event) => setPoi({ ...poi, categoria: event.target.value })} className="w-full rounded-xl border border-[#e4d9c8] px-3 py-2">
+              {POI_CATEGORIES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
             <div className="grid grid-cols-3 gap-2">
               <input value={poi.lat} onChange={(event) => setPoi({ ...poi, lat: event.target.value })} placeholder="Lat" className="rounded-xl border border-[#e4d9c8] px-3 py-2" />
               <input value={poi.lng} onChange={(event) => setPoi({ ...poi, lng: event.target.value })} placeholder="Lng" className="rounded-xl border border-[#e4d9c8] px-3 py-2" />

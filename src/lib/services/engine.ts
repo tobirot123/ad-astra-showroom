@@ -1,7 +1,7 @@
 import { previewImport, readImportRows, exportUnitsCsv } from "@/lib/domain/csv";
 import { uid } from "@/lib/domain/ids";
 import { can, canAccessProject, canSeeLead } from "@/lib/domain/permissions";
-import { adjustPrice, quoteUnit, resolveUnitPrice } from "@/lib/domain/pricing";
+import { adjustPrice, planIsValid, quoteUnit, resolveUnitPrice } from "@/lib/domain/pricing";
 import {
   approveStatusRequest,
   cancelStatusRequest,
@@ -26,6 +26,9 @@ import type {
   Lead,
   NotificationRow,
   Overlay,
+  FacadeMask,
+  FachadaCara,
+  FachadaGrilla,
   PointOfInterest,
   Project,
   RequestTipo,
@@ -1252,6 +1255,84 @@ export function saveOverlays(
   return noResult();
 }
 
+export function saveFacadeMask(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  viewpointId: string,
+  mask: FacadeMask | null,
+  now: Date,
+): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "edit_overlays");
+  const scene = db.viewpoints.find((item) => item.id === viewpointId && item.project_id === projectId);
+  if (!scene) throw new ServiceError("No encontramos esa parada.", 404);
+  if (mask) {
+    const ids = new Set(db.units.filter((unit) => unit.project_id === projectId).map((unit) => unit.id));
+    const linked = [...mask.mapa.map((entry) => entry.unidad_id), ...mask.alphas.map((entry) => entry.unidad_id)].filter(Boolean);
+    if (linked.some((id) => !ids.has(id))) throw new ServiceError("La máscara apunta a una unidad que no es de este proyecto.");
+    if (mask.modo === "idcolor" && !mask.imagen_url) throw new ServiceError("Falta la imagen del pase de color.");
+    if (mask.modo === "alpha" && mask.alphas.length === 0) throw new ServiceError("Subí al menos un PNG de unidad.");
+  }
+  const previous = project.settings.mascaras ?? [];
+  const next = previous.filter((item) => item.viewpoint_id !== viewpointId);
+  if (mask) next.push({ ...mask, viewpoint_id: viewpointId, mapa: mask.mapa.filter((entry) => entry.color), alphas: mask.alphas.filter((entry) => entry.imagen_url) });
+  project.settings = { ...project.settings, mascaras: next };
+  project.updated_at = now.toISOString();
+  logChange(db, {
+    project_id: project.id, change_set_id: null, user_id: actor.id, requested_by: null, request_id: null,
+    entidad: "project", entidad_id: project.id, campo: `mascara:${viewpointId}`, valor_anterior: previous, valor_nuevo: next, origen: "edit",
+  }, now);
+  return noResult();
+}
+
+export function saveFachadas(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  viewpointId: string,
+  caras: FachadaCara[],
+  now: Date,
+): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "edit_overlays");
+  const scene = db.viewpoints.find((item) => item.id === viewpointId && item.project_id === projectId);
+  if (!scene) throw new ServiceError("No encontramos esa parada.", 404);
+  const clean = caras.map((cara, index) => {
+    if (!Array.isArray(cara.esquinas) || cara.esquinas.length !== 4) throw new ServiceError("Cada cara tiene cuatro esquinas.");
+    const esquinas = cara.esquinas.map((point) => {
+      if (!Array.isArray(point) || point.length < 2) throw new ServiceError("Una esquina está incompleta.");
+      const x = Number(point[0]);
+      const y = Number(point[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) throw new ServiceError("Las esquinas van de 0 a 1.");
+      return [Math.round(x * 10000) / 10000, Math.round(y * 10000) / 10000] as [number, number];
+    }) as FachadaCara["esquinas"];
+    const pisos = (cara.pisos ?? []).map((level) => Number(level)).filter((level) => Number.isInteger(level));
+    const orientaciones = (cara.orientaciones ?? []).map((item) => String(item).trim()).filter(Boolean);
+    if (!pisos.length || !orientaciones.length) throw new ServiceError("Cada cara necesita pisos y orientaciones.");
+    const losas = Array.isArray(cara.losas) && cara.losas.length === pisos.length + 1
+      ? cara.losas.map((slab, slabIndex) => {
+          const t = (value: number) => Math.min(1, Math.max(0, Math.round(Number(value) * 10000) / 10000));
+          if (slabIndex === 0) return { izq: 0, der: 0 };
+          if (slabIndex === cara.losas!.length - 1) return { izq: 1, der: 1 };
+          return { izq: t(slab.izq), der: t(slab.der) };
+        })
+      : undefined;
+    return { id: String(cara.id || `${viewpointId}-${index}`), esquinas, pisos, orientaciones, ...(losas ? { losas } : {}) };
+  });
+  const previous = project.settings.fachadas ?? [];
+  const kept = previous.find((item) => item.viewpoint_id === viewpointId);
+  const next: FachadaGrilla[] = previous.filter((item) => item.viewpoint_id !== viewpointId);
+  if (clean.length) next.push({ viewpoint_id: viewpointId, caras: clean, ...(kept?.silueta ? { silueta: kept.silueta } : {}) });
+  project.settings = { ...project.settings, fachadas: next };
+  project.updated_at = now.toISOString();
+  logChange(db, {
+    project_id: project.id, change_set_id: null, user_id: actor.id, requested_by: null, request_id: null,
+    entidad: "project", entidad_id: project.id, campo: `fachadas:${viewpointId}`, valor_anterior: previous, valor_nuevo: next, origen: "edit",
+  }, now);
+  return noResult();
+}
+
 export function updateLead(
   db: Database,
   actor: Actor,
@@ -1292,7 +1373,7 @@ export function updateProject(
   db: Database,
   actor: Actor,
   projectId: string,
-  patch: Partial<Pick<Project, "nombre" | "descripcion" | "direccion" | "contacto" | "fecha_entrega" | "estado" | "lat" | "lng" | "redes">> & { settings?: Partial<Project["settings"]> },
+  patch: Partial<Pick<Project, "nombre" | "descripcion" | "direccion" | "contacto" | "fecha_entrega" | "estado" | "lat" | "lng" | "redes" | "dominio">> & { settings?: Partial<Project["settings"]> },
 ): OpResult {
   const project = requireProject(db, actor, projectId);
   requireAction(actor, "edit_project");
@@ -1308,6 +1389,7 @@ export function updateProject(
   if (patch.lat !== undefined) project.lat = patch.lat;
   if (patch.lng !== undefined) project.lng = patch.lng;
   if (patch.redes) project.redes = { ...(project.redes ?? {}), ...patch.redes };
+  if (patch.dominio !== undefined) project.dominio = patch.dominio?.trim() || null;
   if (patch.contacto) project.contacto = { ...project.contacto, ...patch.contacto };
   if (patch.settings) {
     if (patch.settings.request_expiry_hours != null) {
@@ -1447,6 +1529,117 @@ export function deleteTour(db: Database, actor: Actor, tourId: string): OpResult
   return noResult();
 }
 
+export function savePlan(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  input: { id: string; nombre?: string; anticipo_pct?: number; cuotas?: number; saldo_posesion_pct?: number; refuerzos?: { pct: number; meses: number[] }[]; indice?: "ninguno" | "CAC"; indice_leyenda?: string | null; texto_legal?: string; moneda_cuotas?: "USD" | "ARS"; descuento_pct?: number },
+): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "edit_prices");
+  const plan = db.payment_plans.find((item) => item.id === input.id);
+  const list = plan ? db.price_lists.find((item) => item.id === plan.price_list_id && item.project_id === project.id) : undefined;
+  if (!plan || !list) throw new ServiceError("No encontramos el plan.", 404);
+  if (input.nombre) plan.nombre = input.nombre.trim();
+  if (input.anticipo_pct != null) plan.anticipo_pct = Number(input.anticipo_pct);
+  if (input.cuotas != null) plan.cuotas = Number(input.cuotas);
+  if (input.saldo_posesion_pct != null) plan.saldo_posesion_pct = Number(input.saldo_posesion_pct);
+  if (input.refuerzos) plan.refuerzos = input.refuerzos;
+  if (input.indice) plan.indice = input.indice;
+  if (input.indice_leyenda !== undefined) plan.indice_leyenda = input.indice_leyenda;
+  if (input.texto_legal != null) plan.texto_legal = input.texto_legal;
+  if (input.moneda_cuotas) plan.moneda_cuotas = input.moneda_cuotas;
+  if (input.descuento_pct != null) plan.descuento_pct = Number(input.descuento_pct);
+  if (!planIsValid(plan)) throw new ServiceError("El anticipo, los refuerzos y el saldo no pueden pasar de 100.");
+  return noResult();
+}
+
+export function saveProgress(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  input: { id?: string; fecha: string; titulo: string; descripcion?: string; imagen_url?: string | null },
+): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "edit_project");
+  const existing = input.id ? db.construction_updates.find((item) => item.id === input.id && item.project_id === project.id) : undefined;
+  if (existing) {
+    existing.fecha = input.fecha;
+    existing.titulo = input.titulo.trim();
+    existing.descripcion = input.descripcion ?? "";
+    existing.imagen_url = input.imagen_url ?? null;
+  } else {
+    db.construction_updates.push({
+      id: uid(),
+      project_id: project.id,
+      fecha: input.fecha,
+      titulo: input.titulo.trim(),
+      descripcion: input.descripcion ?? "",
+      imagen_url: input.imagen_url ?? null,
+      orden: db.construction_updates.filter((item) => item.project_id === project.id).length + 1,
+    });
+  }
+  return noResult();
+}
+
+export function deleteProgress(db: Database, actor: Actor, id: string): OpResult {
+  const row = db.construction_updates.find((item) => item.id === id);
+  if (!row) throw new ServiceError("No encontramos el avance.", 404);
+  requireProject(db, actor, row.project_id);
+  requireAction(actor, "edit_project");
+  db.construction_updates = db.construction_updates.filter((item) => item.id !== id);
+  return noResult();
+}
+
+export function saveSection(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  input: { id?: string; titulo: string; cuerpo?: string; visible?: boolean },
+): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "edit_project");
+  const existing = input.id ? db.custom_sections.find((item) => item.id === input.id && item.project_id === project.id) : undefined;
+  if (existing) {
+    existing.titulo = input.titulo.trim();
+    existing.cuerpo = input.cuerpo ?? "";
+    if (input.visible != null) existing.visible = input.visible;
+  } else {
+    db.custom_sections.push({
+      id: uid(),
+      project_id: project.id,
+      titulo: input.titulo.trim(),
+      cuerpo: input.cuerpo ?? "",
+      orden: db.custom_sections.filter((item) => item.project_id === project.id).length + 1,
+      visible: input.visible !== false,
+    });
+  }
+  return noResult();
+}
+
+export function deleteSection(db: Database, actor: Actor, id: string): OpResult {
+  const row = db.custom_sections.find((item) => item.id === id);
+  if (!row) throw new ServiceError("No encontramos la sección.", 404);
+  requireProject(db, actor, row.project_id);
+  requireAction(actor, "edit_project");
+  db.custom_sections = db.custom_sections.filter((item) => item.id !== id);
+  return noResult();
+}
+
+export function requestImprovement(db: Database, actor: Actor, projectId: string, input: { titulo: string; detalle: string }, now: Date): OpResult {
+  const project = requireProject(db, actor, projectId);
+  requireAction(actor, "edit_project");
+  db.improvement_requests.push({
+    id: uid(),
+    project_id: project.id,
+    user_id: actor.id,
+    titulo: input.titulo.trim(),
+    detalle: input.detalle.trim(),
+    created_at: now.toISOString(),
+  });
+  return noResult();
+}
+
 export function saveIntegration(
   db: Database,
   actor: Actor,
@@ -1481,7 +1674,8 @@ export function addMedia(
     carpeta: string;
     unitId?: string | null;
     typologyId?: string | null;
-    rol?: "render" | "plano" | "portada" | "fachada";
+    floorId?: string | null;
+    rol?: "render" | "plano" | "portada" | "fachada" | "vista" | "corte";
     now: Date;
   },
 ): OpResult {
@@ -1504,11 +1698,34 @@ export function addMedia(
     tags: [input.carpeta],
     created_at: input.now.toISOString(),
   });
-  if (input.unitId) {
+  if (input.floorId && input.rol === "corte") {
+    db.media_links = db.media_links.filter((link) => !(link.entidad === "floor" && link.entidad_id === input.floorId && link.rol === "corte"));
+    db.media_links.push({ id: uid(), media_id: id, entidad: "floor", entidad_id: input.floorId, rol: "corte", orden: 0 });
+  } else if (input.unitId) {
     db.media_links.push({ id: uid(), media_id: id, entidad: "unit", entidad_id: input.unitId, rol: input.rol ?? "render", orden: 1 });
   } else if (input.typologyId) {
     db.media_links.push({ id: uid(), media_id: id, entidad: "typology", entidad_id: input.typologyId, rol: input.rol ?? "render", orden: 1 });
   }
+  return noResult();
+}
+
+export function setUnitVista(db: Database, actor: Actor, unitId: string, choice: string, now: Date): OpResult {
+  const unit = db.units.find((item) => item.id === unitId);
+  if (!unit) throw new ServiceError("No encontramos la unidad.", 404);
+  requireProject(db, actor, unit.project_id);
+  requireAction(actor, "edit_units");
+  db.media_links = db.media_links.filter((link) => !(link.entidad === "unit" && link.entidad_id === unit.id && link.rol === "vista"));
+  if (choice === "sin") unit.vista = "sin";
+  else if (!choice) unit.vista = null;
+  else {
+    const media = db.media.find((item) => item.id === choice && item.project_id === unit.project_id);
+    if (!media) throw new ServiceError("No encontramos esa imagen.");
+    unit.vista = null;
+    db.media_links.push({ id: uid(), media_id: media.id, entidad: "unit", entidad_id: unit.id, rol: "vista", orden: 0 });
+  }
+  unit.version += 1;
+  unit.updated_at = now.toISOString();
+  unit.updated_by = actor.id;
   return noResult();
 }
 

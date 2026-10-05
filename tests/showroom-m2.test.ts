@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
 import { buildSeed } from "@/lib/demo/seed";
 import { videosToLoad } from "@/lib/domain/showroom-flow";
@@ -13,13 +13,30 @@ function db() {
 describe("showroom M2", () => {
   it("arma portada, torres, plantas y loteo sin listar estados editables", () => {
     const data = db();
-    const showroom = buildShowroom(data, "alba");
-    expect(showroom?.scenes.map((scene) => scene.tipo)).toEqual(["portada", "aereo", "barrio", "exterior", "exterior", "masterplan"]);
-    expect(showroom?.scenes.find((scene) => scene.tipo === "aereo")?.video_url).toBe("/demo/vuelo-intro.mp4");
-    expect(showroom?.buildings.map((building) => building.nombre)).toEqual(["Torre A", "Torre B", "Loteo del parque"]);
-    expect(showroom?.units.find((unit) => unit.codigo === "L6")?.estado).toBe("pausa");
-    expect(showroom?.units.find((unit) => unit.codigo === "1A")?.tour?.url).toBe("/demo/panorama.svg");
+    const showroom = buildShowroom(data, "pol");
+    expect(showroom?.scenes.map((scene) => scene.tipo)).toEqual(["portada", "exterior", "exterior", "exterior"]);
+    expect(showroom?.scenes.find((scene) => scene.nombre === "360°")?.transicion_url).toContain("spin-clip-1");
+    expect(showroom?.scenes.find((scene) => scene.nombre === "360°")?.reversa_url).toContain("360-to-255");
+    const stops = ["360°", "90°", "255°"];
+    const counts = stops.map((nombre) => showroom?.scenes.find((scene) => scene.nombre === nombre)?.hotspots.length ?? 0);
+    expect(counts.every((count) => count > 0)).toBe(true);
+    expect(new Set(counts).size).toBeGreaterThan(1);
+    expect(showroom?.units.find((unit) => unit.codigo === "501")?.vista_url).toBeTruthy();
+    expect(showroom?.units.find((unit) => unit.codigo === "602")?.planta).toBe("6");
+    expect(showroom?.buildings.map((building) => building.nombre)).toEqual(["POL"]);
+    expect(showroom?.units.find((unit) => unit.codigo === "602")?.plano).toBeNull();
+    expect(showroom?.units.find((unit) => unit.codigo === "18**")?.estado).toBe("pausa");
+    expect(showroom?.units.find((unit) => unit.codigo === "501")?.plano).toContain("UF-501");
     expect(showroom?.pois.length).toBeGreaterThan(0);
+    expect(showroom?.project.brochure).toBeNull();
+    for (const scene of showroom?.scenes ?? []) {
+      for (const url of [scene.video_url, scene.transicion_url, scene.vuelo_url]) {
+        if (!url) continue;
+        expect(existsSync(`public${url}`), url).toBe(true);
+        const poster = url.replace(/\/([^/]+)\.mp4$/, "/posters/$1_first.webp");
+        expect(existsSync(`public${poster}`), poster).toBe(true);
+      }
+    }
     const source = readFileSync("src/components/showroom/showroom-app.tsx", "utf8");
     expect(source).not.toContain("direct_status");
     expect(source).not.toContain("Aprobar");
@@ -47,14 +64,14 @@ describe("showroom M2", () => {
   it("el vendedor no pone una unidad en pausa", () => {
     const data = db();
     const seller = actorFor(data, data.profiles.find((profile) => profile.email.startsWith("laura"))!.id)!;
-    const unit = data.units.find((item) => item.codigo === "1A")!;
+    const unit = data.units.find((item) => item.codigo === "101")!;
     expect(() => directStatus(data, seller, unit.id, "pausa", true, new Date())).toThrow(ServiceError);
   });
 
   it("un proyecto próximamente no abre el recorrido", () => {
     const data = db();
     data.projects[0].estado = "coming_soon";
-    expect(buildShowroom(data, "alba")).toBeNull();
-    expect(buildPublic(data, "alba")?.kind).toBe("coming_soon");
+    expect(buildShowroom(data, "pol")).toBeNull();
+    expect(buildPublic(data, "pol")?.kind).toBe("coming_soon");
   });
 });

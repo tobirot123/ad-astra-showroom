@@ -25,7 +25,7 @@ export interface MetricsSnapshot {
   porFuente: { fuente: string; visitas: number; leads: number }[];
   porCampana: { campana: string; visitas: number; leads: number }[];
   porDispositivo: { device: string; visitas: number }[];
-  topUnidades: { unitId: string; codigo: string; vistas: number; unicos: number; leads: number }[];
+  topUnidades: { unitId: string; codigo: string; vistas: number; unicos: number; leads: number; segundos: number }[];
   embudo: { paso: string; valor: number }[];
 }
 
@@ -138,6 +138,13 @@ export function computeMetrics(q: MetricsQuery): MetricsSnapshot {
     .map(([device, set]) => ({ device, visitas: set.size }))
     .sort((a, b) => b.visitas - a.visitas);
 
+  const dwellSeconds = new Map<string, number>();
+  for (const event of events) {
+    if (event.nombre !== "unit_dwell" || !event.unit_id) continue;
+    const seconds = Number(event.props?.segundos ?? 0);
+    if (!Number.isFinite(seconds) || seconds <= 0) continue;
+    dwellSeconds.set(event.unit_id, (dwellSeconds.get(event.unit_id) ?? 0) + Math.min(seconds, 30 * 60));
+  }
   const viewsByUnit = new Map<string, { vistas: number; visitors: Set<string> }>();
   for (const e of unitEvents) {
     if (!e.unit_id) continue;
@@ -159,6 +166,7 @@ export function computeMetrics(q: MetricsQuery): MetricsSnapshot {
       vistas: row.vistas,
       unicos: row.visitors.size,
       leads: leadsByUnit.get(unitId) ?? 0,
+      segundos: Math.round(dwellSeconds.get(unitId) ?? 0),
     }))
     .sort((a, b) => b.unicos - a.unicos || b.vistas - a.vistas)
     .slice(0, 8);

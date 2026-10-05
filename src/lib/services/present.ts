@@ -1,8 +1,12 @@
 import { computeMetrics, deltaPct, type MetricsSnapshot } from "@/lib/domain/metrics";
 import { can, canSeeLead } from "@/lib/domain/permissions";
-import type { Actor, Database, Unit } from "@/lib/domain/types";
+import type { Actor, Database, Project, Unit } from "@/lib/domain/types";
 import { cashPrice, financedQuote, hoursLeftLabel, pendingBadge, publicStatus } from "@/lib/services/engine";
+import { floorKey, isRealTour } from "@/lib/domain/showroom-flow";
 import { withEffectiveAreas } from "@/lib/domain/units";
+import { galleryHeroRank, illustrativeInterior } from "@/lib/domain/gallery-rank";
+import { encuadreVista, vistaPorOrientacion } from "@/lib/domain/vista";
+import { celdasDeGrilla, plantaDePiso, recortarPoligono } from "@/lib/domain/fachada-grilla";
 
 function mediaUrl(db: Database, mediaId: string | undefined): string | null {
   if (!mediaId) return null;
@@ -19,6 +23,41 @@ function urlsFor(
     .sort((a, b) => a.orden - b.orden)
     .map((link) => mediaUrl(db, link.media_id))
     .filter((url): url is string => Boolean(url));
+}
+
+function hotspotsDeFachada(db: Database, project: Project, sceneId: string) {
+  const grilla = project.settings.fachadas?.find((item) => item.viewpoint_id === sceneId);
+  if (!grilla?.caras.length) return null;
+  const floors = db.floors.filter((floor) => floor.project_id === project.id);
+  const units = db.units
+    .filter((unit) => unit.project_id === project.id)
+    .map((unit) => {
+      const floor = floors.find((item) => item.id === unit.floor_id);
+      return {
+        id: unit.id,
+        codigo: unit.codigo,
+        planta: plantaDePiso(floor?.numero ?? -99),
+        tipo: unit.tipo,
+        orientacion: unit.orientacion,
+      };
+    });
+  const silueta = grilla.silueta ?? [];
+  const cells = celdasDeGrilla(grilla.caras, units);
+  const hotspots = cells.flatMap((cell, index) => {
+    const unit = units.find((item) => item.codigo === cell.codigo);
+    const puntos = recortarPoligono(cell.puntos, silueta);
+    if (!unit || puntos.length < 3) return [];
+    return [{
+      id: `fachada-${sceneId}-${cell.codigo}-${index}`,
+      contenedor: "scene" as const,
+      contenedor_id: sceneId,
+      puntos,
+      vinculo_tipo: "unit" as const,
+      vinculo_id: unit.id,
+      etiqueta: cell.codigo,
+    }];
+  });
+  return hotspots.length ? hotspots : null;
 }
 
 export function buildShowroom(db: Database, slug: string) {
@@ -46,12 +85,21 @@ export function buildShowroom(db: Database, slug: string) {
         if (link.entidad === "unit" && link.entidad_id === unit.id) featureIds.add(link.characteristic_id);
         if (typology && link.entidad === "typology" && link.entidad_id === typology.id) featureIds.add(link.characteristic_id);
       }
-      const links = db.media_links.filter((l) =>
-        (l.entidad === "unit" && l.entidad_id === unit.id) ||
-        (typology && l.entidad === "typology" && l.entidad_id === typology.id),
-      );
+      const unitLinks = db.media_links.filter((l) => l.entidad === "unit" && l.entidad_id === unit.id);
+      const typologyLinks = typology ? db.media_links.filter((l) => l.entidad === "typology" && l.entidad_id === typology.id) : [];
+      const links = [...unitLinks, ...typologyLinks];
+      const vistaPropia = urlsFor(db, unitLinks, "vista")[0] ?? urlsFor(db, typologyLinks, "vista")[0] ?? null;
+      const vistaUrl = unit.vista === "sin" ? null : vistaPropia ?? vistaPorOrientacion(unit.orientacion, project.settings.vistas_orientacion);
       const floorLinks = db.media_links.filter((l) => l.entidad === "floor" && l.entidad_id === unit.floor_id);
       const mediaOf = (rol: string) => urlsFor(db, links, rol);
+      const galeria = mediaOf("galeria")
+        .map((url, index) => ({ url, index }))
+        .sort((a, b) => {
+          const sharedA = illustrativeInterior(a.url, unit.codigo) ? 1 : 0;
+          const sharedB = illustrativeInterior(b.url, unit.codigo) ? 1 : 0;
+          return sharedA - sharedB || galleryHeroRank(a.url) - galleryHeroRank(b.url) || a.index - b.index;
+        })
+        .map((item) => item.url);
       const overlay = db.overlays.find(
         (o) => o.project_id === project.id && o.estado === "published" && o.contenedor === "facade" && o.vinculo_tipo === "unit" && o.vinculo_id === unit.id,
       );
@@ -62,7 +110,11 @@ export function buildShowroom(db: Database, slug: string) {
           (typology && item.entidad === "typology" && item.entidad_id === typology.id) ||
           (floor && item.entidad === "floor" && item.entidad_id === floor.id),
         )
-        .sort((a, b) => a.orden - b.orden)[0];
+        .sort((a, b) => a.orden - b.orden)
+        .find((item) => {
+          const media = db.media.find((entry) => entry.url === item.url);
+          return isRealTour(item.proveedor, item.url, media?.ancho, media?.alto);
+        });
       return {
         id: unit.id,
         codigo: unit.codigo,
@@ -81,7 +133,8 @@ export function buildShowroom(db: Database, slug: string) {
         m2_cubiertos: eff.m2_cubiertos,
         m2_totales: eff.m2_totales,
         orientacion: eff.orientacion,
-        vista: eff.vista,
+        vista: unit.vista === "sin" ? null : eff.vista,
+        planta: floor ? floorKey(floor.numero) : "",
         estado,
         precio,
         mostrar_precio: eff.mostrar_precio && estado !== "consultar",
@@ -93,19 +146,27 @@ export function buildShowroom(db: Database, slug: string) {
           .filter((f) => f.value != null && f.value !== ""),
         values: Object.fromEntries(fields.map((f) => [f.clave, unit.custom_values[f.clave] ?? null])),
         plano: mediaOf("plano")[0] ?? null,
+        planta3d: mediaOf("render")[0] ?? null,
+        galeria,
         renders: [...mediaOf("render"), ...mediaOf("galeria")],
         acabados: mediaOf("acabado"),
         videos: mediaOf("video"),
-        vista_url: urlsFor(db, floorLinks, "vista")[0] ?? null,
+        vista_url: vistaUrl,
+        vista_propia: Boolean(vistaPropia),
+        vista_encuadre: encuadreVista(floor?.numero ?? 0, Boolean(vistaPropia)),
         quote: estado === "consultar" ? null : financedQuote(db, unit),
         polygon: overlay?.puntos ?? null,
-        tour: tour ? { titulo: tour.titulo, proveedor: tour.proveedor, url: tour.url } : unit.tour_url ? { titulo: "Tour 360", proveedor: "url" as const, url: unit.tour_url } : null,
+        tour: tour
+          ? { titulo: tour.titulo, proveedor: tour.proveedor, url: tour.url }
+          : unit.tour_url && isRealTour("url", unit.tour_url)
+            ? { titulo: "Tour 360", proveedor: "url" as const, url: unit.tour_url }
+            : null,
       };
     })
     .sort((a, b) => a.piso_numero - b.piso_numero || a.codigo.localeCompare(b.codigo, "es"));
 
   const facade = db.media_links.find((l) => l.entidad === "project" && l.entidad_id === project.id && l.rol === "fachada");
-  const facadeUrl = facade ? db.media.find((m) => m.id === facade.media_id)?.url ?? "/demo/fachada.svg" : "/demo/fachada.svg";
+  const facadeUrl = facade ? db.media.find((m) => m.id === facade.media_id)?.url ?? "/demo/fachada.webp" : "/demo/fachada.webp";
 
   const publishedOverlays = db.overlays
     .filter((overlay) => overlay.project_id === project.id && overlay.estado === "published")
@@ -122,10 +183,18 @@ export function buildShowroom(db: Database, slug: string) {
   const scenes = db.viewpoints
     .filter((scene) => scene.project_id === project.id)
     .sort((a, b) => a.orden - b.orden)
-    .map((scene) => ({
-      ...scene,
-      hotspots: publishedOverlays.filter((overlay) => overlay.contenedor === "scene" && overlay.contenedor_id === scene.id),
-    }));
+    .map((scene) => {
+      const parada = project.settings.recorrido?.paradas.find((item) => item.orden === scene.orden);
+      return {
+        ...scene,
+        transicion_url: parada?.transicion_url ?? null,
+        reversa_url: parada?.reversa_url ?? null,
+        vuelo_url: parada?.vuelo_url ?? null,
+        hotspots: hotspotsDeFachada(db, project, scene.id) ?? publishedOverlays.filter((overlay) => overlay.contenedor === "scene" && overlay.contenedor_id === scene.id),
+        mascara: project.settings.mascaras?.find((item) => item.viewpoint_id === scene.id) ?? null,
+        silueta: project.settings.fachadas?.find((item) => item.viewpoint_id === scene.id)?.silueta ?? null,
+      };
+    });
   if (!scenes.length) {
     scenes.push({
       id: "fachada",
@@ -136,7 +205,12 @@ export function buildShowroom(db: Database, slug: string) {
       orden: 0,
       imagen_url: facadeUrl,
       video_url: null,
+      transicion_url: null,
+      reversa_url: null,
+      vuelo_url: null,
       hotspots: [],
+      mascara: null,
+      silueta: null,
     });
   }
 
@@ -156,7 +230,9 @@ export function buildShowroom(db: Database, slug: string) {
             id: floor.id,
             nombre: floor.nombre,
             numero: floor.numero,
+            clave: floorKey(floor.numero),
             plano: urlsFor(db, links, "plano")[0] ?? null,
+            corte: urlsFor(db, links, "corte")[0] ?? null,
             vista: urlsFor(db, links, "vista")[0] ?? null,
             libres: units.filter((unit) => unit.floor_id === floor.id && unit.estado === "disponible").length,
           };
@@ -197,6 +273,27 @@ export function buildShowroom(db: Database, slug: string) {
       lng: project.lng ?? null,
       redes: project.redes ?? {},
       lite: Boolean(project.settings.showroom_lite),
+      legal: project.settings.texto_legal ?? "",
+      cookies: project.settings.aviso_cookies ?? "",
+      pasos: project.settings.pasos ?? [],
+      brochure: project.settings.brochure_url || null,
+      logo: project.settings.logo_url ?? null,
+      acento: project.settings.color_acento ?? "#c4a574",
+      titulo: project.settings.titulo_publico || project.nombre,
+      usdArs: project.settings.usd_ars ?? 1450,
+      cac: project.settings.cac_factor ?? 1,
+      ga4: project.settings.ga4_id ?? "",
+      gtm: project.settings.gtm_id ?? "",
+      pixel: project.settings.pixel_id ?? "",
+      remarketing: Boolean(project.settings.remarketing),
+      ficha: {
+        precio: project.settings.ficha?.precio !== false,
+        whatsapp: project.settings.ficha?.whatsapp !== false,
+        compartir: project.settings.ficha?.compartir !== false,
+        pdf: project.settings.ficha?.pdf !== false,
+        ambientes: project.settings.ficha?.ambientes !== false,
+      },
+      dominio: project.dominio,
     },
     organization: {
       nombre: org?.nombre ?? "",
@@ -221,6 +318,31 @@ export function buildShowroom(db: Database, slug: string) {
       })),
     gallery,
     units,
+    plans: db.payment_plans
+      .filter((plan) => db.price_lists.some((list) => list.id === plan.price_list_id && list.project_id === project.id && list.visibilidad === "public"))
+      .map((plan) => ({
+        id: plan.id,
+        nombre: plan.nombre,
+        price_list_id: plan.price_list_id,
+        lista: db.price_lists.find((list) => list.id === plan.price_list_id)?.nombre ?? "",
+        anticipo_pct: plan.anticipo_pct,
+        cuotas: plan.cuotas,
+        periodicidad: plan.periodicidad,
+        moneda_cuotas: plan.moneda_cuotas,
+        refuerzos: plan.refuerzos,
+        saldo_posesion_pct: plan.saldo_posesion_pct,
+        indice: plan.indice,
+        indice_leyenda: plan.indice_leyenda,
+        descuento_pct: plan.descuento_pct,
+        texto_legal: plan.texto_legal,
+        anticipo_min: plan.anticipo_min,
+      })),
+    progress: db.construction_updates
+      .filter((item) => item.project_id === project.id)
+      .sort((a, b) => a.fecha.localeCompare(b.fecha)),
+    sections: db.custom_sections
+      .filter((item) => item.project_id === project.id && item.visible)
+      .sort((a, b) => a.orden - b.orden),
     filters: {
       ambientes: [...new Set(units.map((u) => u.ambientes).filter((n): n is number => n != null))].sort(),
       orientaciones: [...new Set(units.map((u) => u.orientacion).filter((n): n is string => Boolean(n)))],
@@ -242,7 +364,7 @@ export function buildPublic(db: Database, slug: string) {
         descripcion: project.descripcion,
         direccion: project.direccion,
         contacto: project.contacto,
-        imagen: cover?.imagen_url ?? "/demo/portada.svg",
+        imagen: cover?.imagen_url ?? "/demo/portada.webp",
       },
     };
   }
@@ -358,6 +480,9 @@ export function buildBootstrap(db: Database, actor: Actor, now: Date) {
     media_links: db.media_links.filter((l) => db.media.some((m) => m.id === l.media_id && m.project_id === project.id)),
     overlays: inProject(db.overlays),
     viewpoints: inProject(db.viewpoints).sort((a, b) => a.orden - b.orden),
+    construction_updates: inProject(db.construction_updates).sort((a, b) => a.fecha.localeCompare(b.fecha)),
+    custom_sections: inProject(db.custom_sections).sort((a, b) => a.orden - b.orden),
+    improvement_requests: inProject(db.improvement_requests).sort((a, b) => b.created_at.localeCompare(a.created_at)),
     points_of_interest: inProject(db.points_of_interest).sort((a, b) => a.orden - b.orden),
     tours: inProject(db.tours).sort((a, b) => a.orden - b.orden),
     galleries: inProject(db.galleries).sort((a, b) => a.orden - b.orden),

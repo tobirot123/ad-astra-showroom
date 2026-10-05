@@ -21,22 +21,31 @@ import {
   rejectRequest,
   revertInherit,
   deletePoi,
+  deleteProgress,
+  deleteSection,
   deleteTour,
   deleteViewpoint,
+  requestImprovement,
   saveIntegration,
   saveOverlays,
+  saveFacadeMask,
+  saveFachadas,
+  savePlan,
   savePoi,
+  saveProgress,
+  saveSection,
   saveTour,
   saveViewpoint,
   sweep,
   undoChange,
   updateLead,
+  setUnitVista,
   updateProject,
   updateUnit,
   type OpResult,
 } from "@/lib/services/engine";
 import { buildBootstrap } from "@/lib/services/present";
-import { ServiceError, type Actor, type Database, type FieldType, type Overlay, type Role, type UnitStatus } from "@/lib/domain/types";
+import { ServiceError, type Actor, type Database, type FacadeMask, type FachadaCara, type FieldType, type Overlay, type Role, type UnitStatus } from "@/lib/domain/types";
 import type { InheritedField } from "@/lib/domain/units";
 
 export const dynamic = "force-dynamic";
@@ -103,6 +112,8 @@ function run(db: Database, actor: Actor, op: string, body: Record<string, unknow
   switch (op) {
     case "update_unit":
       return updateUnit(db, actor, String(body.unitId), (body.patch ?? {}) as never, now);
+    case "set_unit_vista":
+      return setUnitVista(db, actor, String(body.unitId), String(body.choice ?? ""), now);
     case "direct_status":
       return directStatus(db, actor, String(body.unitId), body.estado as UnitStatus, Boolean(body.confirm), now);
     case "revert_inherit":
@@ -117,6 +128,10 @@ function run(db: Database, actor: Actor, op: string, body: Record<string, unknow
       return archiveField(db, actor, String(body.fieldId));
     case "create_characteristic":
       return createCharacteristic(db, actor, projectId, String(body.nombre ?? ""));
+    case "save_facade_mask":
+      return saveFacadeMask(db, actor, projectId, String(body.viewpointId ?? ""), (body.mask ?? null) as FacadeMask | null, now);
+    case "save_fachadas":
+      return saveFachadas(db, actor, projectId, String(body.viewpointId ?? ""), (body.caras ?? []) as FachadaCara[], now);
     case "save_overlays":
       return saveOverlays(db, actor, projectId, (body.overlays ?? []) as never, now, {
         contenedor: (String(body.contenedor ?? "facade") as Overlay["contenedor"]),
@@ -134,6 +149,18 @@ function run(db: Database, actor: Actor, op: string, body: Record<string, unknow
       return saveTour(db, actor, projectId, (body.tour ?? {}) as never);
     case "delete_tour":
       return deleteTour(db, actor, String(body.tourId));
+    case "save_plan":
+      return savePlan(db, actor, projectId, (body.plan ?? {}) as never);
+    case "save_progress":
+      return saveProgress(db, actor, projectId, (body.progress ?? {}) as never);
+    case "delete_progress":
+      return deleteProgress(db, actor, String(body.progressId));
+    case "save_section":
+      return saveSection(db, actor, projectId, (body.section ?? {}) as never);
+    case "delete_section":
+      return deleteSection(db, actor, String(body.sectionId));
+    case "request_improvement":
+      return requestImprovement(db, actor, projectId, { titulo: String(body.titulo ?? ""), detalle: String(body.detalle ?? "") }, now);
     case "update_lead":
       return updateLead(db, actor, String(body.leadId), (body.patch ?? {}) as never, now);
     case "create_request":

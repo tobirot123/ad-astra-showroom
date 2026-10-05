@@ -16,6 +16,20 @@ export function UnitsScreen() {
   const [csv, setCsv] = useState("");
   const [preview, setPreview] = useState<string>("");
   const [requestUnit, setRequestUnit] = useState<string | null>(null);
+  const planM2 = useMemo(() => {
+    const areas = new Map<string, number>();
+    for (const overlay of data?.overlays ?? []) {
+      if (overlay.contenedor !== "floor" || overlay.vinculo_tipo !== "unit" || !overlay.vinculo_id || overlay.puntos.length < 3) continue;
+      let area = 0;
+      for (let index = 0; index < overlay.puntos.length; index++) {
+        const [x1, y1] = overlay.puntos[index]!;
+        const [x2, y2] = overlay.puntos[(index + 1) % overlay.puntos.length]!;
+        area += x1 * y2 - x2 * y1;
+      }
+      areas.set(overlay.vinculo_id, (Math.abs(area) / 2) * 1920 * 1080 / 495.6584659913169);
+    }
+    return areas;
+  }, [data?.overlays]);
   const rows = useMemo(() => {
     if (!data?.project) return [];
     return data.units.filter((unit) => {
@@ -33,6 +47,10 @@ export function UnitsScreen() {
 
   const floorName = new Map(data.floors.map((floor) => [floor.id, floor.nombre]));
   const typName = new Map(data.typologies.map((typ) => [typ.id, typ.nombre]));
+  function vistaChoice(unitId: string, vista: string | null) {
+    if (vista === "sin") return "sin";
+    return (data?.media_links ?? []).find((link) => link.entidad === "unit" && link.entidad_id === unitId && link.rol === "vista")?.media_id ?? "";
+  }
 
   async function patch(unitId: string, body: Record<string, unknown>, version: number) {
     await mutate({ op: "update_unit", unitId, patch: { ...body, version } });
@@ -102,7 +120,7 @@ export function UnitsScreen() {
           <thead className="text-left text-[#6b6258]">
             <tr>
               <th className="p-3"></th>
-              <th>Unidad</th><th>Piso</th><th>Tipología</th><th>m² cub.</th><th>m² tot.</th><th>Orient.</th><th>Precio</th><th>Estado</th><th>Cochera</th>
+              <th>Unidad</th><th>Piso</th><th>Tipología</th><th>m² cub.</th><th>m² tot.</th><th>Orient.</th><th>Vista</th><th>Precio</th><th>Estado</th><th>Cochera</th>
             </tr>
           </thead>
           <tbody>
@@ -114,6 +132,9 @@ export function UnitsScreen() {
                 <td className="py-2 font-medium">
                   {unit.codigo}
                   {unit.pending_label && <span className="mt-1 block text-xs text-[#9a6240]">{unit.pending_label}</span>}
+                  {planM2.get(unit.id) != null && unit.m2_cubiertos != null && unit.m2_cubiertos > 0 && (Math.abs(planM2.get(unit.id)! - unit.m2_cubiertos) > 8 || Math.abs(planM2.get(unit.id)! - unit.m2_cubiertos) / unit.m2_cubiertos > 0.12) && (
+                    <span className="mt-1 block text-xs text-[#9a6240]">m² informado vs plano · {formatM2(unit.m2_cubiertos)} vs {formatM2(planM2.get(unit.id)!)}</span>
+                  )}
                   {seller && (
                     <button className="mt-1 block text-xs underline" onClick={() => setRequestUnit(unit.id)}>Solicitar</button>
                   )}
@@ -137,6 +158,21 @@ export function UnitsScreen() {
                   />
                 </td>
                 <td>{unit.orientacion}</td>
+                <td>
+                  {editable ? (
+                    <select
+                      value={vistaChoice(unit.id, unit.vista)}
+                      onChange={(event) => void mutate({ op: "set_unit_vista", unitId: unit.id, choice: event.target.value })}
+                      className="max-w-36 rounded border border-transparent bg-transparent text-xs"
+                    >
+                      <option value="">Según orientación</option>
+                      <option value="sin">Sin vista</option>
+                      {data.media.filter((item) => item.tipo !== "video").map((item) => (
+                        <option key={item.id} value={item.id}>{item.nombre}</option>
+                      ))}
+                    </select>
+                  ) : unit.vista === "sin" ? "Sin vista" : "Según orientación"}
+                </td>
                 <td>
                   {prices ? (
                     <input

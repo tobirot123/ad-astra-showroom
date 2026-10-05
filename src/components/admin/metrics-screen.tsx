@@ -34,7 +34,7 @@ export function MetricsScreen() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-serif text-4xl">Métricas</h1>
-          <p className="text-sm text-[#6b6258]">Visitas y leads del showroom. Sin inversión publicitaria: eso queda para más adelante.</p>
+          <p className="text-sm text-[#6b6258]">Visitas, leads y tiempo que cada unidad estuvo abierta en pantalla.</p>
         </div>
         <div className="flex gap-2">
           {RANGES.map((range) => (
@@ -86,7 +86,7 @@ export function MetricsScreen() {
             {metrics.topUnidades.map((unit, index) => (
               <li key={unit.unitId} className="flex justify-between border-b border-[#f4efe6] py-2">
                 <span>{index + 1}. {unit.codigo}</span>
-                <span>{unit.unicos} personas · {unit.leads} leads</span>
+                <span>{unit.unicos} personas · {unit.segundos ? `${Math.round(unit.segundos / 60)} min` : "sin tiempo"} · {unit.leads} leads</span>
               </li>
             ))}
             {!metrics.topUnidades.length && <li className="text-[#6b6258]">Todavía no hay fichas abiertas en este período.</li>}

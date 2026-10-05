@@ -1,18 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 600">
-  <defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#9ec0d4"/>
-      <stop offset="1" stop-color="#f6efe4"/>
-    </linearGradient>
-  </defs>
-  <rect width="2000" height="600" fill="url(#sky)"/>
-  <rect y="380" width="2000" height="220" fill="#c5d2b8"/>
-  <g fill="#2a241f">
-    <rect x="80" y="220" width="70" height="180"/>
-    <rect x="180" y="180" width="90" height="220"/>
-    <rect x="400" y="250" width="60" height="150"/>
-    <rect x="900" y="160" width="120" height="240"/>
-    <rect x="1400" y="210" width="80" height="190"/>
-    <rect x="1700" y="240" width="140" height="160"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="600" viewBox="0 0 2000 600">
+    <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8eb4c8"/><stop offset="1" stop-color="#f6efe4"/></linearGradient></defs>
+    <rect width="2000" height="600" fill="url(#sky)"/>
+    <rect y="390" width="2000" height="210" fill="#b7c8a8"/>
+    <g fill="#2a241f">
+      <rect x="80" y="210" width="70" height="190"/>
+      <rect x="200" y="160" width="110" height="240"/>
+      <rect x="520" y="240" width="80" height="160"/>
+      <rect x="980" y="140" width="140" height="260"/>
+      <rect x="1500" y="200" width="90" height="200"/>
+      <rect x="1760" y="230" width="150" height="170"/>
+    </g>
+  </svg>

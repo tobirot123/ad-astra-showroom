@@ -51,6 +51,9 @@ const ORDER: (keyof Database)[] = [
   "broker_projects",
   "quotations",
   "viewpoints",
+  "construction_updates",
+  "custom_sections",
+  "improvement_requests",
 ];
 
 const CONFLICT: Partial<Record<keyof Database, string>> = {
@@ -110,6 +113,9 @@ const PHASES: (keyof Database)[][] = [
     "brokers",
     "broker_projects",
     "viewpoints",
+    "construction_updates",
+    "custom_sections",
+    "improvement_requests",
   ],
   ["leads", "unit_prices", "media_links", "entity_characteristics"],
   ["status_change_requests", "status_change_request_events", "change_log", "lead_activities", "integration_deliveries", "quotations"],

@@ -186,15 +186,15 @@ export function appendShowcase(db: Database, iso: string) {
   }
 
   const assets: Array<[number, string, string, string]> = [
-    [980, "/demo/portada.svg", "Portada", "portada"],
-    [981, "/demo/aereo.svg", "Vista aérea", "aereo"],
-    [982, "/demo/barrio.svg", "Barrio", "barrio"],
-    [983, "/demo/fachada-b.svg", "Fachada Torre B", "fachada"],
-    [984, "/demo/plano-piso.svg", "Planta Torre A", "planos"],
-    [985, "/demo/plano-piso-b.svg", "Planta Torre B", "planos"],
-    [986, "/demo/masterplan.svg", "Masterplan", "masterplan"],
-    [987, "/demo/panorama.svg", "Panorama del living", "tours"],
-    [988, "/demo/vista-altura.svg", "Vista desde la altura", "vistas"],
+    [980, "/demo/portada.webp", "Portada", "portada"],
+    [981, "/demo/aereo.webp", "Vista aérea", "aereo"],
+    [982, "/demo/barrio.webp", "Barrio", "barrio"],
+    [983, "/demo/fachada-b.webp", "Fachada Torre B", "fachada"],
+    [984, "/demo/plano-piso.webp", "Planta Torre A", "planos"],
+    [985, "/demo/plano-piso-b.webp", "Planta Torre B", "planos"],
+    [986, "/demo/masterplan.webp", "Masterplan", "masterplan"],
+    [987, "/demo/panorama.webp", "Panorama del living", "tours"],
+    [988, "/demo/vista-altura.webp", "Vista desde la altura", "vistas"],
     [989, "/demo/vuelo-intro.mp4", "Vuelo de introducción", "videos"],
   ];
   for (const [n, url, nombre, carpeta] of assets) {
@@ -229,12 +229,12 @@ export function appendShowcase(db: Database, iso: string) {
 
   const aereoId = seedId(941);
   db.viewpoints.push(
-    { id: seedId(940), project_id: projectId, building_id: null, nombre: "Portada", tipo: "portada", orden: 0, imagen_url: "/demo/portada.svg", video_url: null },
-    { id: aereoId, project_id: projectId, building_id: null, nombre: "Vista aérea", tipo: "aereo", orden: 1, imagen_url: "/demo/aereo.svg", video_url: "/demo/vuelo-intro.mp4" },
-    { id: seedId(942), project_id: projectId, building_id: null, nombre: "Barrio", tipo: "barrio", orden: 2, imagen_url: "/demo/barrio.svg", video_url: null },
-    { id: seedId(943), project_id: projectId, building_id: torreA, nombre: "Torre A", tipo: "exterior", orden: 3, imagen_url: "/demo/fachada.svg", video_url: null },
-    { id: seedId(944), project_id: projectId, building_id: torreB, nombre: "Torre B", tipo: "exterior", orden: 4, imagen_url: "/demo/fachada-b.svg", video_url: null },
-    { id: seedId(945), project_id: projectId, building_id: loteo, nombre: "Loteo", tipo: "masterplan", orden: 5, imagen_url: "/demo/masterplan.svg", video_url: null },
+    { id: seedId(940), project_id: projectId, building_id: null, nombre: "Portada", tipo: "portada", orden: 0, imagen_url: "/demo/portada.webp", video_url: null },
+    { id: aereoId, project_id: projectId, building_id: null, nombre: "Vista aérea", tipo: "aereo", orden: 1, imagen_url: "/demo/aereo.webp", video_url: "/demo/vuelo-intro.mp4" },
+    { id: seedId(942), project_id: projectId, building_id: null, nombre: "Barrio", tipo: "barrio", orden: 2, imagen_url: "/demo/barrio.webp", video_url: null },
+    { id: seedId(943), project_id: projectId, building_id: torreA, nombre: "Torre A", tipo: "exterior", orden: 3, imagen_url: "/demo/fachada.webp", video_url: null },
+    { id: seedId(944), project_id: projectId, building_id: torreB, nombre: "Torre B", tipo: "exterior", orden: 4, imagen_url: "/demo/fachada-b.webp", video_url: null },
+    { id: seedId(945), project_id: projectId, building_id: loteo, nombre: "Loteo", tipo: "masterplan", orden: 5, imagen_url: "/demo/masterplan.webp", video_url: null },
   );
   db.overlays.push(
     zone(1350, projectId, "scene", aereoId, AERIAL_HOTSPOTS.torreA, "building", torreA, "Torre A"),
@@ -259,7 +259,7 @@ export function appendShowcase(db: Database, iso: string) {
     entidad: "typology",
     entidad_id: typ2.id,
     proveedor: "url",
-    url: "/demo/panorama.svg",
+    url: "/demo/panorama.webp",
     titulo: "Living en 360",
     orden: 1,
   });

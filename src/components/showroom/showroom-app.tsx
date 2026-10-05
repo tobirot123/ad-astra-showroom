@@ -1,13 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
+import { PoiMap } from "@/components/maps/poi-map";
+import { FacadeVeil } from "@/components/showroom/facade-veil";
+import { maskReady } from "@/lib/domain/facade-mask";
+import { showQuote } from "@/lib/domain/finance";
 import { STATUS_COLOR, STATUS_LABEL, formatM2, formatNumber, formatUsd } from "@/lib/domain/format";
-import { sortUnits, tourEmbed, unitMatches, videosToLoad, type FlowFilters } from "@/lib/domain/showroom-flow";
+import { travelMinutes } from "@/lib/domain/geo";
+import { poiColor, poiLabel } from "@/lib/domain/poi";
+import "./showroom.css";
+import { coverFrame, portraitCenter } from "@/lib/domain/cover-frame";
+import { interiorPoint } from "@/lib/domain/polygon";
+import { AmenityStage, ContactStage, FullIcon, GalleryStage, HoverCard, MapStage, PhMenu, QrIcon, RecorridoStage, UnitSheet, VideoStage } from "@/components/showroom/ph-panels";
+import { stackMarkers } from "@/lib/domain/fachada-grilla";
+import { entryFloor, facadeMatch, sceneKey, sortUnits, tourEmbed, unitMatches, videosToLoad, type FlowFilters } from "@/lib/domain/showroom-flow";
 import type { ShowroomData } from "@/lib/services/present";
 
 type Unit = ShowroomData["units"][number];
 type Overlay = ShowroomData["overlays"][number];
-type Sheet = null | "menu" | "filtros" | "galeria" | "amenities" | "mapa" | "info" | "comparar" | "tour" | "compartir" | "vista" | "acabados";
+type Sheet = null | "menu" | "filtros" | "galeria" | "amenities" | "mapa" | "info" | "comparar" | "tour" | "compartir" | "vista" | "acabados" | "obra" | "secciones" | "pasos" | "recorridos" | "video" | "contacto";
+type UnitTab = "galeria" | "vistas" | "planta3d" | "planos" | "recorrido" | "video";
 
 const EMPTY_FILTERS: FlowFilters = {
   estado: "todos",
@@ -58,13 +71,74 @@ function contain(boxW: number, boxH: number, imgW: number, imgH: number) {
 }
 
 function centroid(points: [number, number][]) {
-  const x = points.reduce((sum, point) => sum + point[0], 0) / points.length;
-  const y = points.reduce((sum, point) => sum + point[1], 0) / points.length;
-  return [x, y] as const;
+  return interiorPoint(points);
 }
 
 function floorMark(nombre: string, numero: number) {
-  return /baja/i.test(nombre) ? "PB" : String(numero);
+  if (/techo/i.test(nombre)) return "T";
+  if (/terraza|azotea/i.test(nombre)) return "Az";
+  if (/baja/i.test(nombre)) return "PB";
+  if (/subsuelo 1|ss1/i.test(nombre)) return "S1";
+  if (/subsuelo 2|ss2/i.test(nombre)) return "S2";
+  return String(numero);
+}
+
+function towerWait(tower: { floors: { id: string }[] } | null, floorId: string | null) {
+  if (!tower || !floorId) return 0;
+  const index = tower.floors.findIndex((item) => item.id === floorId);
+  return index < 0 ? 0 : Math.min(36, index * 5);
+}
+
+function plantaLabel(nombre: string, numero: number) {
+  if (/^piso\s+\d+/i.test(nombre)) return `Planta ${numero}`;
+  return nombre;
+}
+
+function insetRing(points: [number, number][], amount: number): [number, number][] {
+  const cx = points.reduce((sum, point) => sum + point[0], 0) / points.length;
+  const cy = points.reduce((sum, point) => sum + point[1], 0) / points.length;
+  return points.map(([x, y]) => [x + (cx - x) * amount, y + (cy - y) * amount]);
+}
+
+function objectCoverPoint(boxW: number, boxH: number, imgW: number, imgH: number, nx: number, ny: number) {
+  const scale = Math.max(boxW / imgW, boxH / imgH);
+  const width = imgW * scale;
+  const height = imgH * scale;
+  return { x: (boxW - width) / 2 + nx * width, y: (boxH - height) / 2 + ny * height };
+}
+
+function slabFrame(boxW: number, boxH: number, imgW: number, imgH: number, drop: number, anchor: { x: number; y: number } | null) {
+  const scale = Math.min((boxH * 0.8) / imgH, (boxW * 0.9) / imgW);
+  const width = imgW * scale;
+  const height = imgH * scale;
+  const center = anchor ? objectCoverPoint(boxW, boxH, 1920, 1080, anchor.x, anchor.y) : { x: boxW / 2, y: boxH * 0.48 };
+  return { left: center.x - width / 2, top: center.y - height / 2 + drop, width, height };
+}
+
+function fitWidthFrame(boxW: number, boxH: number, imgW: number, imgH: number) {
+  const height = imgH * (boxW / imgW);
+  return { left: 0, top: Math.max(12, (boxH - height) / 2), width: boxW, height };
+}
+
+function plateFrame(boxW: number, boxH: number, imgW: number, imgH: number, plate: { x0: number; y0: number; x1: number; y1: number }) {
+  const spanX = Math.max(0.08, plate.x1 - plate.x0);
+  const spanY = Math.max(0.08, plate.y1 - plate.y0);
+  const scale = (boxW * 0.92) / (spanX * imgW);
+  const width = imgW * scale;
+  const height = imgH * scale;
+  const cx = (plate.x0 + plate.x1) / 2;
+  const cy = (plate.y0 + plate.y1) / 2;
+  return { left: boxW / 2 - cx * width, top: boxH / 2 - cy * height, width, height };
+}
+
+function tabReady(unit: Unit, tab: UnitTab, plantaImagen: string | null) {
+  if (tab === "galeria") return unit.galeria.length > 0;
+  if (tab === "vistas") return Boolean(unit.vista_url);
+  if (tab === "planta3d") return Boolean(unit.planta3d);
+  if (tab === "planos") return Boolean(unit.plano || plantaImagen);
+  if (tab === "recorrido") return Boolean(unit.tour);
+  if (tab === "video") return unit.videos.length > 0;
+  return false;
 }
 
 export function ShowroomApp({ data }: { data: ShowroomData }) {
@@ -88,10 +162,41 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [cookies, setCookies] = useState<"ask" | "yes" | "no">("ask");
+  const [bridge, setBridge] = useState<string | null>(null);
+  const [afterBridge, setAfterBridge] = useState<null | { kind: "scene"; index: number } | { kind: "floor"; id: string }>(null);
   const [photo, setPhoto] = useState(0);
   const [matchCursor, setMatchCursor] = useState(0);
+  const [tip, setTip] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [disp, setDisp] = useState(false);
+  const [coverShift, setCoverShift] = useState(0);
+  const [floorsOpen, setFloorsOpen] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
+  const [card, setCard] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [unitTab, setUnitTab] = useState<UnitTab>("galeria");
+  const [narrow, setNarrow] = useState(false);
+  const [lang, setLang] = useState<"es" | "en">("es");
+  const [filterPop, setFilterPop] = useState<null | "area" | "estado" | "dorm" | "menu">(null);
+  const [estados, setEstados] = useState<string[]>([]);
+  const [dorms, setDorms] = useState<string[]>([]);
+  const [area, setArea] = useState<{ min: number; max: number } | null>(null);
+  const [towerCard, setTowerCard] = useState<{ x: number; y: number } | null>(null);
+  const [towerHot, setTowerHot] = useState(false);
+  const [chip, setChip] = useState<{ label: string; x: number; y: number } | null>(null);
+  const hoverAt = useRef(0);
+  const [arrive, setArrive] = useState(false);
+  const [railOpen, setRailOpen] = useState(true);
+  const [hint, setHint] = useState(false);
+  const [qr, setQr] = useState<string | null>(null);
+  const pinned = useRef(false);
+  const depth = useRef(0);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ dist: number; zoom: number } | null>(null);
+  const cardTimer = useRef<number | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
+  const swipe = useRef<{ x: number; y: number; lx: number; ly: number; shift: number } | null>(null);
   const moved = useRef(false);
 
   const scene = walk[sceneIndex] ?? walk[0];
@@ -100,11 +205,23 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const active = data.units.find((unit) => unit.id === unitId) ?? null;
   const videos = entered && phase === "escena" ? videosToLoad(walk, sceneIndex, lite) : { current: null, next: null };
 
-  const filtering = filters.estado !== "todos" || filters.ambientes !== "todos" || filters.orientacion !== "todas" || Boolean(filters.precioMax) || Object.values(extra).some((value) => value && value !== "todos");
+  const areaBound = useMemo(() => {
+    const values = data.units
+      .filter((unit) => unit.tipo === "departamento" || unit.tipo === "local")
+      .map((unit) => unit.m2_totales)
+      .filter((value): value is number => value != null && value > 0);
+    if (!values.length) return { min: 0, max: 100 };
+    return { min: Math.min(...values), max: Math.max(...values) };
+  }, [data.units]);
+  const areaMin = area?.min ?? areaBound.min;
+  const areaMax = area?.max ?? areaBound.max;
+  const areaActive = area != null && (area.min > areaBound.min + 0.05 || area.max < areaBound.max - 0.05);
+  const filtering = filters.ambientes !== "todos" || filters.orientacion !== "todas" || Boolean(filters.precioMax) || estados.length > 0 || dorms.length > 0 || areaActive || Object.values(extra).some((value) => value && value !== "todos");
 
   const matches = useMemo(() => {
     return sortUnits(data.units.filter((unit) => {
-      if (!unitMatches(unit, filters)) return false;
+      if (!unitMatches(unit, { ...filters, estado: "todos", ambientes: "todos" })) return false;
+      if (!facadeMatch(unit, { estados, dorms, areaMin, areaMax, areaOn: areaActive })) return false;
       for (const field of data.filters.fields) {
         const selected = extra[field.clave];
         if (!selected || selected === "todos") continue;
@@ -115,7 +232,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       }
       return true;
     }), filters.sort);
-  }, [data.units, data.filters.fields, filters, extra]);
+  }, [data.units, data.filters.fields, filters, extra, estados, dorms, areaActive, areaMin, areaMax]);
 
   useEffect(() => {
     const { visitor, session, fresh } = identity();
@@ -135,17 +252,34 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     };
     if (fresh) send("session_start");
     send("page_view");
+    const consent = localStorage.getItem("adastra-cookies");
+    if (consent === "1") setCookies("yes");
+    else if (consent === "0") setCookies("no");
     const stored = sessionStorage.getItem("adastra-lite");
     if (stored === "1") setLite(true);
     if (stored === "0") setLite(false);
-    const code = new URLSearchParams(window.location.search).get("unidad");
-    if (code) {
-      const unit = data.units.find((item) => item.codigo.toLowerCase() === code.toLowerCase());
-      if (unit) {
-        setEntered(true);
-        openOnPlan(unit, true);
-      }
+    applySearch(window.location.search);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("disp") === "1") setDisp(true);
+    if (params.has("escena") || params.has("planta") || params.has("unidad")) {
+      history.replaceState({ showroom: 1, depth: 0 }, "", window.location.href);
     }
+    const storedLang = localStorage.getItem("adastra-lang");
+    if (storedLang === "en" || storedLang === "es") setLang(storedLang);
+    const narrowQuery = window.matchMedia("(max-width: 767px)");
+    const syncNarrow = () => setNarrow(narrowQuery.matches);
+    syncNarrow();
+    narrowQuery.addEventListener("change", syncNarrow);
+    const onPop = () => {
+      const next = window.history.state?.depth;
+      depth.current = typeof next === "number" ? next : 0;
+      applySearch(window.location.search);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      narrowQuery.removeEventListener("change", syncNarrow);
+    };
     // La visita se registra una vez por carga.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.project.slug]);
@@ -155,22 +289,56 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       setPlaying(false);
       return;
     }
-    setPlaying(Boolean(scene?.video_url));
-  }, [entered, phase, sceneIndex, lite, scene?.video_url]);
+    setPlaying(Boolean(scene?.video_url) && !scene?.transicion_url);
+  }, [entered, phase, sceneIndex, lite, scene?.video_url, scene?.transicion_url]);
+
+  useEffect(() => { setCoverShift(0); }, [sceneIndex]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setSheet(null);
-        setUnitId(null);
-      }
+      if (event.key === "Escape") setSheet(null);
       if (sheet || unitId || !entered || phase !== "escena") return;
-      if (event.key === "ArrowRight") setSceneIndex((index) => (index + 1) % walk.length);
-      if (event.key === "ArrowLeft") setSceneIndex((index) => (index - 1 + walk.length) % walk.length);
+      if (event.key === "ArrowRight") spin(1);
+      if (event.key === "ArrowLeft") spin(-1);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [entered, phase, sheet, unitId, walk.length]);
+  }, [entered, phase, sheet, unitId, walk.length, sceneIndex, lite, bridge, scene]);
+
+  useEffect(() => {
+    pinned.current = false;
+    setCard(null);
+    setHoverId(null);
+    setTowerCard(null);
+    setTowerHot(false);
+    setChip(null);
+    setFilterPop(null);
+    hoverAt.current = performance.now() + 450;
+  }, [phase, sceneIndex, disp, floorId, entered, bridge]);
+
+
+  const activeId = active?.id;
+  useEffect(() => {
+    if (!activeId) return;
+    const started = Date.now();
+    const unitId = activeId;
+    return () => {
+      const segundos = Math.round((Date.now() - started) / 1000);
+      if (segundos < 1) return;
+      const { visitor, session } = identity();
+      const payload = JSON.stringify({
+        slug: data.project.slug,
+        nombre: "unit_dwell",
+        visitorId: visitor,
+        sessionId: session,
+        unitId,
+        props: { segundos },
+        utm: readUtm(),
+        width: window.innerWidth,
+      });
+      if (navigator.sendBeacon) navigator.sendBeacon("/api/track", new Blob([payload], { type: "application/json" }));
+    };
+  }, [activeId, data.project.slug]);
 
   function track(nombre: string, unit?: Unit | null, props?: Record<string, unknown>) {
     const { visitor, session } = identity();
@@ -198,13 +366,24 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     setSheet(null);
   }
 
-  function openFloor(nextFloorId: string) {
+  function openFloor(nextFloorId: string, historyMode: "push" | "replace" | "none" = "none") {
     setPhase("planta");
     setFloorId(nextFloorId);
     setUnitId(null);
+    setHighlightId(null);
+    if (historyMode !== "none") {
+      const floor = data.buildings.flatMap((item) => item.floors).find((item) => item.id === nextFloorId);
+      if (floor) pushLocation({ planta: floor.clave }, historyMode);
+    }
     setZoom(1);
     setPan({ x: 0, y: 0 });
     setSheet(null);
+    setArrive(false);
+    setRailOpen(true);
+    if (window.matchMedia("(max-width: 767px)").matches) {
+      setHint(true);
+      window.setTimeout(() => setHint(false), 2500);
+    }
   }
 
   function openOnPlan(unit: Unit, card: boolean) {
@@ -230,10 +409,30 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     setSent(false);
     setSheet(null);
     track("unit_view", unit, { origen });
+    if (unit.planta) pushLocation({ planta: unit.planta, unidad: unit.codigo });
+  }
+
+  function revealUnit(unit: Unit) {
+    if (unit.floor_id) {
+      setPhase("planta");
+      setFloorId(unit.floor_id);
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+    }
+    setHighlightId(unit.id);
+    setUnitId(unit.id);
+    setPhoto(0);
+    setSent(false);
+    setSheet(null);
+    track("unit_view", unit, { origen: "fachada" });
+    if (unit.planta) {
+      pushLocation({ planta: unit.planta });
+      pushLocation({ planta: unit.planta, unidad: unit.codigo });
+    }
   }
 
   function zones(): Overlay[] {
-    if (!entered || !scene) return [];
+    if (!entered || !scene || bridge || (playing && phase === "escena")) return [];
     if (phase === "planta" && floorId) {
       return data.overlays.filter((overlay) => overlay.contenedor === "floor" && overlay.contenedor_id === floorId);
     }
@@ -241,27 +440,159 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     if (scene.tipo === "masterplan") {
       return data.overlays.filter((overlay) => overlay.contenedor === "masterplan" && overlay.contenedor_id === scene.building_id);
     }
-    if (scene.tipo === "exterior") {
-      return data.overlays.filter((overlay) => overlay.contenedor === "facade" && overlay.contenedor_id === scene.building_id);
-    }
+    if (scene.tipo === "exterior") return disp && !maskReady(scene.mascara) ? scene.hotspots : [];
     return [];
   }
 
-  function onZone(overlay: Overlay) {
-    if (moved.current) return;
+  function forgetCard() {
+    if (cardTimer.current) window.clearTimeout(cardTimer.current);
+    pinned.current = false;
+    setCard(null);
+    setHoverId(null);
+    setTowerCard(null);
+    setTowerHot(false);
+    setChip(null);
+  }
+
+  function placeCard(x: number, y: number) {
+    if (window.matchMedia("(max-width: 767px)").matches) return { x: 12, y: window.innerHeight - 12 };
+    const width = 220;
+    const height = 196;
+    const pad = 8;
+    const pills = [...document.querySelectorAll<HTMLElement>(".plan-pill")].map((node) => {
+      const box = node.getBoundingClientRect();
+      return { left: box.left - pad, top: box.top - pad, right: box.right + pad, bottom: box.bottom + pad };
+    });
+    const clamp = (left: number, top: number) => ({
+      left: Math.min(window.innerWidth - width - 8, Math.max(8, left)),
+      top: Math.min(window.innerHeight - height - 8, Math.max(8, top)),
+    });
+    const overlap = (left: number, top: number) => {
+      const right = left + width;
+      const bottom = top + height;
+      if (left < 8 || top < 8 || right > window.innerWidth - 8 || bottom > window.innerHeight - 8) return 1e9;
+      let area = 0;
+      for (const pill of pills) {
+        const ix = Math.min(right, pill.right) - Math.max(left, pill.left);
+        const iy = Math.min(bottom, pill.bottom) - Math.max(top, pill.top);
+        if (ix > 0 && iy > 0) area += ix * iy;
+      }
+      return area;
+    };
+    const candidates: { left: number; top: number }[] = [];
+    for (const gap of [16, 56, 110, 180]) {
+      candidates.push(
+        { left: x + gap, top: y - height / 2 },
+        { left: x - width - gap, top: y - height / 2 },
+        { left: x - width / 2, top: y - height - gap },
+        { left: x - width / 2, top: y + gap },
+      );
+    }
+    let best = clamp(candidates[0]!.left, candidates[0]!.top);
+    let bestScore = overlap(best.left, best.top) * 1e6 + Math.hypot(best.left + width / 2 - x, best.top + height / 2 - y);
+    for (const candidate of candidates.slice(1)) {
+      const point = clamp(candidate.left, candidate.top);
+      const score = overlap(point.left, point.top) * 1e6 + Math.hypot(point.left + width / 2 - x, point.top + height / 2 - y);
+      if (score < bestScore) {
+        best = point;
+        bestScore = score;
+      }
+    }
+    let { left, top } = best;
+    for (let guard = 0; guard < 18 && overlap(left, top) > 0 && overlap(left, top) < 1e8; guard += 1) {
+      let cx = 0;
+      let cy = 0;
+      let count = 0;
+      const right = left + width;
+      const bottom = top + height;
+      for (const pill of pills) {
+        const ix = Math.min(right, pill.right) - Math.max(left, pill.left);
+        const iy = Math.min(bottom, pill.bottom) - Math.max(top, pill.top);
+        if (ix > 0 && iy > 0) {
+          cx += (pill.left + pill.right) / 2;
+          cy += (pill.top + pill.bottom) / 2;
+          count += 1;
+        }
+      }
+      if (!count) break;
+      const awayX = left + width / 2 - cx / count;
+      const awayY = top + height / 2 - cy / count;
+      const step = 16;
+      const next = clamp(left + Math.sign(awayX || x - left) * step, top + Math.sign(awayY || y - top) * step);
+      if (next.left === left && next.top === top) break;
+      if (overlap(next.left, next.top) > overlap(left, top)) break;
+      left = next.left;
+      top = next.top;
+    }
+    return { x: left, y: top };
+  }
+
+  function holdCard(unit: Unit, x: number, y: number, pin: boolean) {
+    if (pinned.current && !pin) return;
+    if (cardTimer.current) window.clearTimeout(cardTimer.current);
+    if (pin) pinned.current = true;
+    const point = placeCard(x, y);
+    setCard((current) => (current?.id === unit.id && !pin ? current : { id: unit.id, x: point.x, y: point.y }));
+  }
+
+  function releaseCard() {
+    if (pinned.current) return;
+    if (cardTimer.current) window.clearTimeout(cardTimer.current);
+    cardTimer.current = window.setTimeout(() => {
+      if (!pinned.current) setCard(null);
+    }, 220);
+  }
+
+  function enterUnit(unit: Unit, origen: string, tab?: UnitTab) {
+    forgetCard();
+    const plantaImagen = data.buildings.flatMap((item) => item.floors).find((item) => item.id === unit.floor_id)?.plano ?? null;
+    const order: UnitTab[] = ["planta3d", "galeria", "planos", "vistas", "recorrido", "video"];
+    const next = tab && tabReady(unit, tab, plantaImagen) ? tab : order.find((item) => tabReady(unit, item, plantaImagen)) ?? "planos";
+    setUnitTab(next);
+    setPhoto(0);
+    if (disp && phase === "escena" && !narrow) {
+      setHighlightId(unit.id);
+      setUnitId(unit.id);
+      setSent(false);
+      setSheet(null);
+      track("unit_view", unit, { origen });
+      if (scene) pushLocation({ escena: sceneKey(scene.nombre), unidad: unit.codigo });
+      return;
+    }
+    const onPlan = phase === "planta" || scene?.tipo === "masterplan";
+    if (onPlan) chooseUnit(unit, origen);
+    else revealUnit(unit);
+  }
+
+  function locateOnPlan() {
+    const unit = data.units.find((item) => item.id === unitId);
+    if (!unit?.floor_id) return;
+    setUnitId(null);
+    setHighlightId(unit.id);
+    setPhase("planta");
+    setFloorId(unit.floor_id);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    pinned.current = true;
+    setCard({ id: unit.id, x: Math.round(window.innerWidth / 2 - 110), y: Math.round(window.innerHeight / 2) });
+  }
+
+  function onZone(overlay: Overlay, point?: { x: number; y: number }) {
+    if (moved.current || bridge) return;
     if (overlay.vinculo_tipo === "building" && overlay.vinculo_id) {
       goBuilding(overlay.vinculo_id);
       return;
     }
     const unit = data.units.find((item) => item.id === overlay.vinculo_id);
     if (!unit) return;
-    const onPlan = phase === "planta" || scene?.tipo === "masterplan";
-    if (onPlan) {
-      chooseUnit(unit, phase === "planta" ? "planta" : "masterplan");
+    setTip(null);
+    const x = point?.x ?? window.innerWidth / 2;
+    const y = point?.y ?? window.innerHeight / 2;
+    if (disp && phase === "escena" && !narrow) {
+      enterUnit(unit, "fachada");
       return;
     }
-    if (unit.floor_id) openFloor(unit.floor_id);
-    setHighlightId(unit.id);
+    holdCard(unit, x, y, true);
   }
 
   function matched(unitIdValue: string | null) {
@@ -314,6 +645,16 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     window.open(`https://wa.me/${data.project.contacto.whatsapp}?text=${text}`, "_blank", "noopener");
   }
 
+  async function openQr(unit?: Unit | null) {
+    const url = new URL(`/s/${data.project.slug}`, window.location.origin);
+    if (unit?.planta) url.searchParams.set("planta", unit.planta);
+    if (unit) url.searchParams.set("unidad", unit.codigo);
+    else if (floor) url.searchParams.set("planta", floor.clave);
+    else if (scene) url.searchParams.set("escena", sceneKey(scene.nombre));
+    setQr(await QRCode.toDataURL(url.toString(), { margin: 1, width: 320, color: { dark: "#1c2733", light: "#ffffff" } }));
+    setSheet("compartir");
+  }
+
   async function share(unit?: Unit | null) {
     const url = new URL(`/s/${data.project.slug}`, window.location.origin);
     if (unit) url.searchParams.set("unidad", unit.codigo);
@@ -338,311 +679,786 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     });
   }
 
+  function setDisponibilidad(on: boolean) {
+    setDisp(on);
+    if (!on) setLegendOpen(false);
+    const url = new URL(window.location.href);
+    if (on) url.searchParams.set("disp", "1");
+    else url.searchParams.delete("disp");
+    history.replaceState(window.history.state ?? { showroom: 1 }, "", url);
+  }
+
+  function pushLocation(loc: { escena?: string; planta?: string; unidad?: string }, mode: "push" | "replace" = "push") {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("escena");
+    url.searchParams.delete("planta");
+    url.searchParams.delete("unidad");
+    if (loc.planta) url.searchParams.set("planta", loc.planta);
+    if (loc.unidad) url.searchParams.set("unidad", loc.unidad);
+    if (loc.escena && !loc.planta) url.searchParams.set("escena", loc.escena);
+    const nextDepth = mode === "push" ? depth.current + 1 : depth.current;
+    if (mode === "push") depth.current = nextDepth;
+    const state = { showroom: 1, depth: nextDepth };
+    if (mode === "replace") history.replaceState(state, "", url);
+    else history.pushState(state, "", url);
+  }
+
+  function applySearch(search: string) {
+    const params = new URLSearchParams(search);
+    const unidad = params.get("unidad");
+    const planta = params.get("planta");
+    const escena = params.get("escena");
+    if (unidad) {
+      const unit = data.units.find((item) => item.codigo.toLowerCase() === unidad.toLowerCase());
+      if (!unit) return;
+      setEntered(true);
+      setHighlightId(unit.id);
+      setUnitId(unit.id);
+      setPhoto(0);
+      setSheet(null);
+      if (!planta && escena) {
+        const index = walk.findIndex((item) => sceneKey(item.nombre) === escena);
+        setPhase("escena");
+        if (index >= 0) setSceneIndex(index);
+        return;
+      }
+      if (unit.floor_id) {
+        setPhase("planta");
+        setFloorId(unit.floor_id);
+      }
+      return;
+    }
+    setUnitId(null);
+    setHighlightId(null);
+    if (planta) {
+      const floor = data.buildings.flatMap((item) => item.floors).find((item) => item.clave === planta);
+      if (!floor) return;
+      setEntered(true);
+      setPhase("planta");
+      setFloorId(floor.id);
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      return;
+    }
+    if (escena) {
+      const index = walk.findIndex((item) => sceneKey(item.nombre) === escena);
+      setEntered(true);
+      setPhase("escena");
+      if (index >= 0) setSceneIndex(index);
+      return;
+    }
+    setEntered(false);
+    setPhase("escena");
+  }
+
   function enter() {
     setEntered(true);
     setPhase("escena");
     setSceneIndex(0);
+    setUnitId(null);
     setSheet(null);
+    setArrive(true);
+    const first = walk[0];
+    if (first) pushLocation({ escena: sceneKey(first.nombre) });
   }
 
-  const image = !entered ? cover?.imagen_url ?? data.facade : phase === "planta" ? floor?.plano ?? scene?.imagen_url ?? data.facade : scene?.imagen_url ?? data.facade;
-  const cinematic = !entered || scene?.tipo === "barrio";
+  function goAerial() {
+    forgetCard();
+    const fromFloor = phase === "planta";
+    setDisponibilidad(false);
+    setUnitId(null);
+    const aerial = walk.findIndex((item) => item.tipo === "aereo");
+    const exterior = walk.findIndex((item) => item.tipo === "exterior");
+    const index = aerial >= 0 ? aerial : exterior;
+    const already = phase === "escena" && !disp && index >= 0 && sceneIndex === index;
+    setEntered(true);
+    setPhase("escena");
+    if (index >= 0) setSceneIndex(index);
+    setSheet(fromFloor || already ? "mapa" : null);
+  }
+
+  function finishBridge() {
+    const job = afterBridge;
+    setBridge(null);
+    setAfterBridge(null);
+    setPlaying(false);
+    if (job?.kind === "scene") {
+      setSceneIndex(job.index);
+      setPhase("escena");
+      const next = walk[job.index];
+      if (next) pushLocation({ escena: sceneKey(next.nombre) }, "replace");
+    }
+    if (job?.kind === "floor") openFloor(job.id, "push");
+  }
+
+  function spin(direction: 1 | -1) {
+    if (!scene || bridge) return;
+    const next = (sceneIndex + direction + walk.length) % walk.length;
+    const clip = direction > 0 ? scene.transicion_url : scene.reversa_url;
+    setTip(null);
+    if (!lite && clip) {
+      setAfterBridge({ kind: "scene", index: next });
+      setBridge(clip);
+      return;
+    }
+    setSceneIndex(next);
+    setPhase("escena");
+    const target = walk[next];
+    if (target) pushLocation({ escena: sceneKey(target.nombre) }, "replace");
+  }
+
+  function stepBack() {
+    if (unitId) {
+      if (depth.current > 0) {
+        history.back();
+        return;
+      }
+      setUnitId(null);
+      setHighlightId(null);
+      if (phase === "planta" && floor) pushLocation({ planta: floor.clave }, "replace");
+      setEntered(true);
+      return;
+    }
+    if (phase === "planta") {
+      if (depth.current > 0) {
+        history.back();
+        return;
+      }
+      setPhase("escena");
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      const current = walk[sceneIndex] ?? walk[0];
+      if (current) pushLocation({ escena: sceneKey(current.nombre) }, "replace");
+      return;
+    }
+    if (depth.current > 0) {
+      history.back();
+      return;
+    }
+    setEntered(false);
+  }
+
+  function goPlans() {
+    const source = building?.floors ?? data.buildings[0]?.floors ?? [];
+    const next = entryFloor(source);
+    if (!next) return;
+    if (!lite && scene?.vuelo_url) {
+      setAfterBridge({ kind: "floor", id: next.id });
+      setBridge(scene.vuelo_url);
+      return;
+    }
+    openFloor(next.id, "push");
+  }
+
+  useEffect(() => {
+    if (!unitId) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") stepBack();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [unitId, floor, phase, sceneIndex, lite, walk]);
+
+  const floorPlate = (() => {
+    if (!floorId) return null;
+    const pts = data.overlays.filter((overlay) => overlay.contenedor === "floor" && overlay.contenedor_id === floorId).flatMap((overlay) => overlay.puntos);
+    if (pts.length < 3) return null;
+    let x0 = 1;
+    let y0 = 1;
+    let x1 = 0;
+    let y1 = 0;
+    for (const [x, y] of pts) {
+      x0 = Math.min(x0, x);
+      y0 = Math.min(y0, y);
+      x1 = Math.max(x1, x);
+      y1 = Math.max(y1, y);
+    }
+    const padX = (x1 - x0) * 0.08;
+    const padY = (y1 - y0) * 0.08;
+    return { x0: x0 - padX, y0: y0 - padY, x1: x1 + padX, y1: y1 + padY };
+  })();
+  const usingCorte = phase === "planta" && Boolean(floor?.corte);
+  const plateMask = !usingCorte && floor?.plano && /planta-0[3-9]\.webp/.test(floor.plano)
+    ? floor.plano.replace(/planta-(0[3-9])\.webp/, "casco-$1.png")
+    : null;
+  const towerAnchor = scene?.silueta && scene.silueta.length >= 3
+    ? {
+        x: scene.silueta.reduce((sum, point) => sum + point[0], 0) / scene.silueta.length,
+        y: scene.silueta.reduce((sum, point) => sum + point[1], 0) / scene.silueta.length,
+      }
+    : null;
+  const image = !entered ? cover?.imagen_url ?? data.facade : phase === "planta" ? floor?.corte ?? floor?.plano ?? scene?.imagen_url ?? data.facade : scene?.imagen_url ?? data.facade;
+  const fitCover = usingCorte || (phase !== "planta" && scene?.tipo !== "barrio" && scene?.tipo !== "masterplan");
+  const showTower = entered && phase === "escena" && !disp && !bridge && scene?.tipo === "exterior" && (scene.silueta?.length ?? 0) >= 3;
+  const veils = disp && phase === "escena" && scene?.tipo === "exterior" && !bridge && !playing;
   const tower = phase === "planta"
     ? data.buildings.find((item) => item.floors.some((floorItem) => floorItem.id === floorId)) ?? building
     : building;
-  const showRail = entered && Boolean(tower && tower.floors.length > 0 && (phase === "planta" || scene?.tipo === "exterior"));
+  const floorDrop = towerWait(tower, floorId);
+  const showRail = entered && phase === "planta" && !active && Boolean(tower && tower.floors.length > 0);
   const polygons = zones();
+  const columns = stackMarkers(
+    polygons.flatMap((overlay) => {
+      if (overlay.vinculo_tipo !== "unit" || overlay.puntos.length < 4) return [];
+      const unit = data.units.find((item) => item.id === overlay.vinculo_id);
+      return [{ id: overlay.id, stack: unit?.orientacion || overlay.id, points: overlay.puntos }];
+    }),
+  );
+  const legendUnits = polygons.flatMap((overlay) => {
+    if (overlay.vinculo_tipo !== "unit") return [];
+    const unit = data.units.find((item) => item.id === overlay.vinculo_id);
+    if (!unit || unit.tipo !== "departamento") return [];
+    if (filtering && !matches.some((item) => item.id === unit.id)) return [];
+    return [unit];
+  });
+  const cardUnit = card ? data.units.find((unit) => unit.id === card.id) ?? null : null;
+  const contextText = phase === "planta" && floor ? plantaLabel(floor.nombre, floor.numero) : scene?.tipo === "aereo" || scene?.tipo === "exterior" ? "Vista aérea" : scene?.nombre ?? "";
 
   return (
-    <main className="relative h-[100dvh] overflow-hidden bg-[#12110f] text-white" data-testid="showroom">
+    <main className={`showroom relative h-[100dvh] overflow-hidden bg-[#12110f] text-white${showRail && railOpen ? " rail-open" : ""}`} data-testid="showroom" style={{ ["--accent" as string]: data.project.acento }}>
       <Stage
         stageRef={stageRef}
         src={image}
-        cover={cinematic}
-        zoom={phase === "planta" ? zoom : 1}
-        pan={phase === "planta" ? pan : { x: 0, y: 0 }}
-        video={playing && videos.current ? videos.current : null}
-        onVideoDone={() => setPlaying(false)}
+        cover={fitCover}
+        focus={{ x: phase === "escena" ? portraitCenter(scene?.nombre) : 0.5, y: 0.48 }}
+        shift={coverShift}
+        clip={phase === "escena" && scene?.tipo === "exterior" && scene.silueta ? (narrow ? insetRing(scene.silueta, 0.12) : scene.silueta) : undefined}
+        zoom={zoom}
+        pan={pan}
+        soft={!entered}
+        layout={phase === "planta" && !usingCorte ? (narrow ? "tall" : "slab") : "auto"}
+        plate={narrow && phase === "planta" && !usingCorte ? floorPlate : null}
+        drop={phase === "planta" && !usingCorte && !narrow ? floorDrop : 0}
+        anchor={phase === "planta" && !usingCorte && !narrow ? towerAnchor : null}
+        mask={phase === "planta" && !usingCorte && !narrow ? plateMask : null}
+        haze={false}
+        arrive={arrive}
+        onArrived={() => setArrive(false)}
+        settle={false}
+        backdrop={phase === "planta" && !usingCorte ? scene?.imagen_url ?? data.facade : null}
+        video={bridge ?? (playing && videos.current ? videos.current : null)}
+        poster={image}
+        onVideoDone={() => {
+          if (bridge) finishBridge();
+          else setPlaying(false);
+        }}
+        marks={phase === "planta" ? polygons.flatMap((overlay) => {
+          const unit = overlay.vinculo_tipo === "unit" ? data.units.find((item) => item.id === overlay.vinculo_id) : undefined;
+          if (!unit) return [];
+          const [x, y] = centroid(overlay.puntos);
+          return [{ id: overlay.id, x, y, color: STATUS_COLOR[unit.estado] ?? "#1ac366", label: unit.codigo, dim: filtering && !matched(unit.id) }];
+        }) : []}
         onPointerDown={(event) => {
-          if (phase !== "planta" || zoom === 1) return;
-          drag.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y };
           moved.current = false;
+          pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          if (pointers.current.size === 2 && phase === "planta") {
+            const [a, b] = [...pointers.current.values()];
+            pinch.current = { dist: Math.hypot(a!.x - b!.x, a!.y - b!.y) || 1, zoom };
+            swipe.current = null;
+          }
+          const target = event.target as HTMLElement;
+          if (!target.closest("g") && !target.closest(".hover-card") && !target.closest(".building-card")) {
+            pinned.current = false;
+            setCard(null);
+            setTowerCard(null);
+            setTowerHot(false);
+          }
+          if (zoom > 1 || (phase === "planta" && narrow)) {
+            drag.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y };
+            return;
+          }
+          if (phase === "escena" && entered && !bridge) swipe.current = { x: event.clientX, y: event.clientY, lx: event.clientX, ly: event.clientY, shift: coverShift };
         }}
         onPointerMove={(event) => {
+          if (pointers.current.has(event.pointerId)) pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          if (pinch.current && pointers.current.size === 2) {
+            const [a, b] = [...pointers.current.values()];
+            const dist = Math.hypot(a!.x - b!.x, a!.y - b!.y) || 1;
+            setZoom(Math.min(4, Math.max(1, pinch.current.zoom * (dist / pinch.current.dist))));
+            return;
+          }
+          if (swipe.current && phase === "escena" && !bridge) {
+            swipe.current.lx = event.clientX;
+            swipe.current.ly = event.clientY;
+            const dx = swipe.current.lx - swipe.current.x;
+            const dy = swipe.current.ly - swipe.current.y;
+            const portrait = window.matchMedia("(max-width: 767px)").matches;
+            if (portrait && fitCover) {
+              setCoverShift(swipe.current.shift + dx);
+              if (Math.abs(dx) > 8) moved.current = true;
+            } else if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+              swipe.current = null;
+              moved.current = true;
+              spin(dx < 0 ? 1 : -1);
+            }
+          }
           if (!drag.current) return;
           const dx = event.clientX - drag.current.x;
           const dy = event.clientY - drag.current.y;
           if (Math.abs(dx) + Math.abs(dy) > 4) moved.current = true;
           setPan({ x: drag.current.px + dx, y: drag.current.py + dy });
         }}
-        onPointerUp={() => {
+        onPointerUp={(event) => {
+          pointers.current.delete(event.pointerId);
+          if (pointers.current.size < 2) pinch.current = null;
           drag.current = null;
+          const start = swipe.current;
+          swipe.current = null;
+          if (!start || phase !== "escena" || bridge) return;
+          if (window.matchMedia("(max-width: 767px)").matches) return;
+          const lost = event.type === "pointercancel" || event.type === "pointerleave";
+          const endX = lost ? start.lx : event.clientX;
+          const endY = lost ? start.ly : event.clientY;
+          const dx = endX - start.x;
+          const dy = endY - start.y;
+          if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+            moved.current = true;
+            spin(dx < 0 ? 1 : -1);
+          }
         }}
         onWheel={(event) => {
-          if (phase !== "planta") return;
+          if (!entered || active) return;
           event.preventDefault();
           setZoom((value) => Math.min(4, Math.max(1, value + (event.deltaY < 0 ? 0.2 : -0.2))));
         }}
+        veil={veils && scene && maskReady(scene.mascara) ? (
+          <FacadeVeil
+            mask={scene.mascara}
+            units={data.units}
+            matched={(unitId) => matched(unitId)}
+            filtering={filtering}
+            hoverId={hoverId}
+            onHover={(unitId, point) => {
+              if (performance.now() < hoverAt.current) return;
+              setHoverId(unitId);
+              const unit = unitId ? data.units.find((item) => item.id === unitId) : undefined;
+              if (narrow) return;
+              if (unit && point) setChip({ label: unit.codigo, x: point.x, y: point.y });
+              else setChip(null);
+            }}
+            onPick={(unitId) => {
+              if (moved.current) return;
+              const unit = data.units.find((item) => item.id === unitId);
+              if (!unit) return;
+              setTip(null);
+              if (narrow) holdCard(unit, window.innerWidth / 2, window.innerHeight * 0.42, true);
+              else enterUnit(unit, "fachada");
+            }}
+          />
+        ) : null}
       >
+        {showTower && scene?.silueta && (
+          <g
+            className="cursor-pointer"
+            onPointerMove={(event) => {
+              if (performance.now() < hoverAt.current || narrow || event.pointerType === "touch") return;
+              setTowerHot(true);
+              setTowerCard({ x: event.clientX, y: event.clientY });
+            }}
+            onMouseEnter={(event) => {
+              if (performance.now() < hoverAt.current || narrow) return;
+              setTowerHot(true);
+              setTowerCard({ x: event.clientX, y: event.clientY });
+            }}
+            onMouseLeave={() => {
+              if (pinned.current) return;
+              setTowerHot(false);
+              setTowerCard(null);
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (moved.current) return;
+              pinned.current = true;
+              setTowerHot(true);
+              setTowerCard({ x: event.clientX, y: event.clientY });
+            }}
+          >
+            <polygon
+              points={scene.silueta.map((point) => point.join(",")).join(" ")}
+              fill="#737CB5"
+              fillOpacity={towerHot ? 0.42 : 0}
+              stroke="none"
+              pointerEvents="fill"
+              style={{ transition: "fill-opacity 150ms ease-in-out" }}
+            />
+          </g>
+        )}
         {polygons.map((overlay) => {
           const unit = overlay.vinculo_tipo === "unit" ? data.units.find((item) => item.id === overlay.vinculo_id) : undefined;
-          const color = unit ? STATUS_COLOR[unit.estado] ?? "#1f8a5b" : "#c4a574";
+          const color = unit ? STATUS_COLOR[unit.estado] ?? "#1ac366" : "#c4a574";
           const on = matched(unit?.id ?? overlay.vinculo_id);
           const selected = highlightId && (highlightId === unit?.id || highlightId === overlay.vinculo_id);
           const aerial = overlay.vinculo_tipo === "building";
+          const exterior = phase === "escena" && !aerial;
+          const hovered = hoverId === overlay.id;
           const [cx, cy] = centroid(overlay.puntos);
+          const facadeHover = exterior && veils && hovered;
+          const fill = facadeHover ? "#737CB5" : aerial ? "#c4a574" : color;
+          const fillOpacity = aerial ? 0.01 : facadeHover ? 0.62 : exterior && veils ? (filtering && on ? 0.7 : 0) : hovered || selected ? 0.22 : 0;
           return (
-            <g key={overlay.id} onClick={(event) => { event.stopPropagation(); onZone(overlay); }} className="cursor-pointer">
+            <g
+              key={overlay.id}
+              onClick={(event) => { event.stopPropagation(); onZone(overlay, { x: event.clientX, y: event.clientY }); }}
+              onPointerMove={(event) => {
+                if (performance.now() < hoverAt.current || event.pointerType === "touch") return;
+                if (!unit || window.matchMedia("(pointer: coarse)").matches) return;
+                setHoverId(overlay.id);
+                if (exterior && veils) setChip({ label: unit.codigo, x: event.clientX, y: event.clientY });
+                else holdCard(unit, event.clientX, event.clientY, false);
+              }}
+              onMouseEnter={(event) => {
+                if (performance.now() < hoverAt.current) return;
+                if (!unit) return;
+                if (window.matchMedia("(pointer: coarse)").matches) return;
+                setHoverId(overlay.id);
+                if (exterior && veils) setChip({ label: unit.codigo, x: event.clientX, y: event.clientY });
+                else holdCard(unit, event.clientX, event.clientY, false);
+              }}
+              onMouseLeave={() => {
+                setHoverId((current) => (current === overlay.id ? null : current));
+                setChip(null);
+                releaseCard();
+              }}
+              className="cursor-pointer"
+            >
               <polygon
                 points={overlay.puntos.map((point) => point.join(",")).join(" ")}
-                fill={aerial ? "#c4a574" : color}
-                fillOpacity={aerial ? 0.01 : on ? (selected ? 0.55 : 0.38) : 0.05}
-                stroke={aerial ? "transparent" : "#fff"}
-                strokeWidth={selected ? 0.008 : 0.003}
+                fill={fill}
+                fillOpacity={on || facadeHover || (exterior && veils && filtering) ? fillOpacity : exterior && veils ? 0 : 0.04}
+                stroke="none"
+                pointerEvents="fill"
+                style={{ transition: "fill-opacity 150ms ease-in-out" }}
               />
+              {exterior && veils && (
+                <polygon
+                  points={(columns.get(overlay.id) ?? overlay.puntos).map((point) => point.join(",")).join(" ")}
+                  fill={facadeHover ? "#737CB5" : color}
+                  fillOpacity={facadeHover ? 0.95 : 0.7}
+                  stroke="none"
+                  pointerEvents="none"
+                />
+              )}
               {aerial && (
                 <>
                   <circle cx={cx} cy={cy} r="0.028" fill="#c4a574" stroke="#fff" strokeWidth="0.006" />
                   <text x={cx} y={cy + 0.055} textAnchor="middle" fontSize="0.028" fill="#fff">{overlay.etiqueta}</text>
                 </>
               )}
-              {unit && phase === "planta" && (
-                <text x={cx} y={cy} textAnchor="middle" fontSize="0.032" fill="#fff">{unit.codigo}</text>
-              )}
             </g>
           );
         })}
       </Stage>
-      {videos.next && <video src={videos.next} preload="auto" muted playsInline className="pointer-events-none absolute h-px w-px opacity-0" />}
-
-      <button
-        type="button"
-        aria-label="Menú"
-        className="absolute left-4 top-4 z-20 grid h-11 w-11 place-items-center rounded-full bg-[#c4a574] text-[#1c1915]"
-        onClick={() => setSheet(sheet === "menu" ? null : "menu")}
-      >
-        <span className="flex flex-col gap-1.5">
-          <span className="block h-0.5 w-5 bg-current" />
-          <span className="block h-0.5 w-5 bg-current" />
-          <span className="block h-0.5 w-5 bg-current" />
-        </span>
-      </button>
-
-      {entered && (
-        <div className="pointer-events-none absolute inset-x-0 top-5 z-10 text-center">
-          <p className="text-[11px] uppercase tracking-[0.28em] text-white/80">{phase === "planta" ? floor?.nombre : scene?.nombre}</p>
-          <p className="font-serif text-2xl drop-shadow">{data.project.nombre}</p>
+      {phase === "escena" && scene?.transicion_url && (
+        <video src={scene.transicion_url} preload="auto" muted playsInline className="pointer-events-none absolute h-px w-px opacity-0" />
+      )}
+      {phase === "escena" && scene?.reversa_url && (
+        <video src={scene.reversa_url} preload="auto" muted playsInline className="pointer-events-none absolute h-px w-px opacity-0" />
+      )}
+      {phase === "escena" && walk[(sceneIndex + 1) % walk.length]?.imagen_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={walk[(sceneIndex + 1) % walk.length]?.imagen_url} alt="" className="pointer-events-none absolute h-px w-px opacity-0" />
+      )}
+      {phase === "escena" && walk[(sceneIndex - 1 + walk.length) % walk.length]?.imagen_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={walk[(sceneIndex - 1 + walk.length) % walk.length]?.imagen_url} alt="" className="pointer-events-none absolute h-px w-px opacity-0" />
+      )}
+      {!entered && walk[0]?.imagen_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={walk[0].imagen_url} alt="" className="pointer-events-none absolute h-px w-px opacity-0" />
+      )}
+      {towerCard && !active && (
+        <div className="building-card" data-testid="building-card" style={{ left: towerCard.x, top: towerCard.y }}>
+          <p>{data.project.nombre}</p>
+          <button type="button" className="enter-btn" onClick={() => { forgetCard(); goPlans(); }}>Ingresar</button>
         </div>
       )}
-
-      <div className="absolute right-4 top-4 z-20 flex gap-2">
-        <button type="button" className="rounded-full bg-white/15 px-3 py-2 text-sm backdrop-blur" onClick={() => setSheet("filtros")}>Filtros</button>
-        {compare.length > 0 && (
-          <button type="button" className="rounded-full bg-white px-3 py-2 text-sm text-[#1c1915]" onClick={() => setSheet("comparar")}>Comparar ({compare.length})</button>
-        )}
-      </div>
+      {chip && disp && !narrow && !active && <div className="code-chip" style={{ left: chip.x, top: chip.y }}>{chip.label}</div>}
+      {cardUnit && !active && !(disp && phase === "escena" && !narrow) && (
+        <HoverCard
+          unit={cardUnit}
+          x={card?.x ?? 0}
+          y={card?.y ?? 0}
+          onEnter={() => enterUnit(cardUnit, phase === "planta" ? "planta" : "fachada")}
+          onTour={() => enterUnit(cardUnit, "tour", "recorrido")}
+          onKeep={() => { if (cardTimer.current) window.clearTimeout(cardTimer.current); }}
+          onLeave={releaseCard}
+        />
+      )}
 
       {!entered && (
-        <div className="absolute inset-0 z-10 grid place-items-center px-6 text-center">
-          <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-[#c4a574]">Showroom</p>
-            <h1 className="mt-3 font-serif text-6xl text-white drop-shadow md:text-8xl">{data.project.nombre}</h1>
-            <p className="mt-3 text-sm tracking-wide text-white/80">{data.project.direccion}</p>
+        <div className="cover-gate">
+          {data.project.logo && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={data.project.logo} alt="" className="cover-logo" />
+          )}
+          <h1>{data.project.nombre}</h1>
+          {data.project.direccion && <p className="addr">{data.project.direccion}</p>}
+          <button type="button" data-testid="entrar" className="cover-enter" onClick={enter}>{lang === "en" ? "Enter" : "Entrar"}</button>
+          <div className="langs" role="group" aria-label={lang === "en" ? "Language" : "Idioma"}>
+            <button type="button" className={lang === "es" ? "on" : ""} onClick={() => { setLang("es"); localStorage.setItem("adastra-lang", "es"); }}>ES</button>
+            <button type="button" className={lang === "en" ? "on" : ""} onClick={() => { setLang("en"); localStorage.setItem("adastra-lang", "en"); }}>EN</button>
           </div>
-          <button
-            type="button"
-            data-testid="entrar"
-            className="absolute bottom-10 rounded-full bg-white px-10 py-3 text-sm tracking-[0.18em] text-[#1c1915] uppercase"
-            onClick={enter}
-          >
-            Entrar
+        </div>
+      )}
+
+      {entered && <div className={`chrome absolute left-4 top-4 z-[36] ${active ? "with-unit" : ""}`}>
+        <div className="flex items-center gap-2">
+          <button type="button" aria-label="Menú" className="round accent" onClick={() => setSheet(sheet === "menu" ? null : "menu")}>
+            <span className="flex flex-col gap-1">
+              <span className="block h-0.5 w-4 bg-current" />
+              <span className="block h-0.5 w-4 bg-current" />
+              <span className="block h-0.5 w-4 bg-current" />
+            </span>
+          </button>
+          {entered && <button type="button" aria-label="Volver" className="round" onClick={stepBack}>‹</button>}
+          <button type="button" aria-label="Compartir" className="round" onClick={() => void openQr(active)}>
+            <QrIcon />
           </button>
         </div>
-      )}
+        {entered && <p className="context-label">{contextText}</p>}
+      </div>}
 
-      {entered && phase === "escena" && walk.length > 1 && (
-        <>
-          <button type="button" aria-label="Escena anterior" className="absolute left-3 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-2xl text-[#1c1915] md:grid" onClick={() => setSceneIndex((index) => (index - 1 + walk.length) % walk.length)}>‹</button>
-          <button type="button" aria-label="Escena siguiente" className="absolute right-16 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-2xl text-[#1c1915] md:grid" onClick={() => setSceneIndex((index) => (index + 1) % walk.length)}>›</button>
-        </>
-      )}
-
-      {showRail && tower && (
-        <aside className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-1 rounded-full bg-black/55 px-1.5 py-2 backdrop-blur" data-testid="floor-rail">
-          {tower.floors.map((item) => {
-            const current = phase === "planta" && item.id === floorId;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                title={`${item.libres} libres`}
-                className={`grid min-w-11 place-items-center rounded-full px-1 py-1 leading-none ${current ? "bg-white text-[#1c1915]" : "text-white"}`}
-                onClick={() => openFloor(item.id)}
-              >
-                <span className="text-sm font-semibold">{floorMark(item.nombre, item.numero)}</span>
-                <span className={`text-[10px] ${current ? "text-[#6b6258]" : "text-white/75"}`}>{item.libres}</span>
-              </button>
-            );
-          })}
-        </aside>
-      )}
-
-      {entered && (
-        <div className="absolute inset-x-0 bottom-5 z-20 hidden justify-center gap-2 md:flex">
-          <button type="button" className="rounded-full bg-white/90 px-4 py-2 text-sm text-[#1c1915]" onClick={() => { const index = walk.findIndex((item) => item.tipo === "aereo"); if (index >= 0) { setSceneIndex(index); setPhase("escena"); } }}>Vista aérea</button>
-          {building && building.floors[0] && (
-            <button type="button" className="rounded-full bg-white/90 px-4 py-2 text-sm text-[#1c1915]" onClick={() => openFloor(building.floors[0].id)}>Ver plantas</button>
+      {entered && !active && (
+        <div className="top-pills">
+          {disp && phase === "escena" ? (
+            <>
+              <button type="button" className={filterPop ? "pill on filtros-compact" : "pill filtros-compact"} onClick={() => setFilterPop(filterPop === "menu" ? null : "menu")}>Filtros</button>
+              <span className="filtros-full">
+                <span className="pill-slot">
+                  <button type="button" className={areaActive || filterPop === "area" ? "pill picked" : "pill"} onClick={() => setFilterPop(filterPop === "area" ? null : "area")}>Filtrar área</button>
+                  {filterPop === "area" && (
+                    <div className="pop under">
+                      <p className="mb-2 text-sm font-medium">Área</p>
+                      <input type="range" min={areaBound.min} max={areaBound.max} step="0.1" value={areaMin} onChange={(event) => setArea({ min: Math.min(Number(event.target.value), areaMax), max: areaMax })} className="w-full" />
+                      <input type="range" min={areaBound.min} max={areaBound.max} step="0.1" value={areaMax} onChange={(event) => setArea({ min: areaMin, max: Math.max(Number(event.target.value), areaMin) })} className="mt-1 w-full" />
+                      <p className="mt-2 text-sm text-[#5c564e]">{areaMin.toFixed(1)} – {areaMax.toFixed(1)} m²</p>
+                    </div>
+                  )}
+                </span>
+                <span className="pill-slot">
+                  <button type="button" className={estados.length || filterPop === "estado" ? "pill picked" : "pill"} onClick={() => setFilterPop(filterPop === "estado" ? null : "estado")}>Filtrar disponibilidad{estados.length ? ` (${estados.length})` : ""}</button>
+                  {filterPop === "estado" && (
+                    <div className="pop under">
+                      {([["vendida", "Vendido"], ["reservada", "Reservado"], ["disponible", "Disponible"]] as const).map(([value, label]) => (
+                        <label key={value} className="check">
+                          <input type="checkbox" checked={estados.includes(value)} onChange={() => setEstados((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value])} />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </span>
+                <span className="pill-slot">
+                  <button type="button" className={dorms.length || filterPop === "dorm" ? "pill picked" : "pill"} onClick={() => setFilterPop(filterPop === "dorm" ? null : "dorm")}>Filtrar dormitorios{dorms.length ? ` (${dorms.length})` : ""}</button>
+                  {filterPop === "dorm" && (
+                    <div className="pop under">
+                      {["1", "2", "3"].map((value) => (
+                        <label key={value} className="check">
+                          <input type="checkbox" checked={dorms.includes(value)} onChange={() => setDorms((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value])} />
+                          {value}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </span>
+              </span>
+            </>
+          ) : (
+            <>
+              <button type="button" className={phase === "escena" && !disp ? "pill on" : "pill"} onClick={goAerial}>{lang === "en" ? "Aerial view" : "Vista aérea"}</button>
+              {building && building.floors[0] && <button type="button" className={phase === "planta" ? "pill on" : "pill"} onClick={() => { setDisponibilidad(false); goPlans(); }}>{lang === "en" ? "View plans" : "Ver plantas"}</button>}
+              <button type="button" className="pill" onClick={() => setSheet("galeria")}>{lang === "en" ? "Gallery" : "Galería"}</button>
+            </>
           )}
-          <button type="button" className="rounded-full bg-white/90 px-4 py-2 text-sm text-[#1c1915]" onClick={() => setSheet("galeria")}>Galería</button>
-        </div>
-      )}
-
-      {phase === "planta" && (
-        <div className="absolute bottom-5 left-4 z-20 flex items-center gap-2">
-          <button type="button" className="rounded-full bg-white px-3 py-1 text-[#1c1915]" onClick={() => { setPhase("escena"); setZoom(1); setPan({ x: 0, y: 0 }); }}>Volver</button>
-          <button type="button" className="rounded-full bg-white/90 px-3 py-1 text-[#1c1915]" onClick={() => setZoom((value) => Math.max(1, value - 0.25))}>−</button>
-          <button type="button" className="rounded-full bg-white/90 px-3 py-1 text-[#1c1915]" onClick={() => setZoom((value) => Math.min(4, value + 0.25))}>+</button>
-          {zoom > 1 && floor?.plano && (
-            <div className="relative hidden h-16 w-24 overflow-hidden rounded-md border border-white/40 md:block" data-testid="minimap">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={floor.plano} alt="" className="h-full w-full object-fill" />
-              <span className="absolute border border-white" style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, left: `${(1 - 1 / zoom) * 50}%`, top: `${(1 - 1 / zoom) * 50}%` }} />
+          <button type="button" aria-label="Pantalla completa" className="round" onClick={() => { if (!document.fullscreenElement) void document.documentElement.requestFullscreen(); else void document.exitFullscreen(); }}>
+            <FullIcon />
+          </button>
+          {disp && phase === "escena" && filterPop === "menu" && (
+            <div className="pop filtros-pop">
+              <p className="mb-2 text-sm font-medium">Área</p>
+              <input type="range" min={areaBound.min} max={areaBound.max} step="0.1" value={areaMin} onChange={(event) => setArea({ min: Math.min(Number(event.target.value), areaMax), max: areaMax })} className="w-full" />
+              <input type="range" min={areaBound.min} max={areaBound.max} step="0.1" value={areaMax} onChange={(event) => setArea({ min: areaMin, max: Math.max(Number(event.target.value), areaMin) })} className="mt-1 w-full" />
+              <p className="mt-2 text-sm text-[#5c564e]">{areaMin.toFixed(1)} m² – {areaMax.toFixed(1)} m²</p>
+              <p className="mb-1 mt-3 text-sm font-medium">Disponibilidad</p>
+              {([["vendida", "Vendido"], ["reservada", "Reservado"], ["disponible", "Disponible"]] as const).map(([value, label]) => (
+                <label key={value} className="check">
+                  <input type="checkbox" checked={estados.includes(value)} onChange={() => setEstados((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value])} />
+                  {label}
+                </label>
+              ))}
+              <p className="mb-1 mt-3 text-sm font-medium">Dormitorios</p>
+              {["1", "2", "3"].map((value) => (
+                <label key={value} className="check">
+                  <input type="checkbox" checked={dorms.includes(value)} onChange={() => setDorms((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value])} />
+                  {value}
+                </label>
+              ))}
             </div>
           )}
         </div>
       )}
 
+      {veils && !active && (
+        <div className="legend" data-testid="legend">
+          <span><i style={{ background: STATUS_COLOR.disponible }} />Disponible {legendUnits.filter((unit) => unit.estado === "disponible").length}</span>
+          <span><i style={{ background: STATUS_COLOR.reservada }} />Reservada {legendUnits.filter((unit) => unit.estado === "reservada").length}</span>
+          <span><i style={{ background: STATUS_COLOR.vendida }} />Vendida {legendUnits.filter((unit) => unit.estado === "vendida").length}</span>
+        </div>
+      )}
+
+      {entered && disp && phase === "escena" && !active && !filterPop && (
+        <p className="pointer-events-none absolute right-4 top-[4.6rem] z-20 rounded-lg bg-[#1c2733]/80 px-3 py-1 text-xs text-white">Disponibilidad · Departamentos</p>
+      )}
+
+      {entered && !active && phase === "escena" && walk.length > 1 && !filterPop && (
+        <>
+          <button type="button" aria-label="Girar a la izquierda" className="spin-btn absolute left-3 top-1/2 z-30 -translate-y-1/2" onClick={() => spin(-1)}>‹</button>
+          <button type="button" aria-label="Girar a la derecha" className="spin-btn absolute right-3 top-1/2 z-30 -translate-y-1/2" onClick={() => spin(1)}>›</button>
+          <span className="giro right-3">Giro 360</span>
+        </>
+      )}
+
+      {entered && !active && (
+        <div className="absolute bottom-5 left-4 z-20 flex flex-col gap-2">
+          <button type="button" aria-label="Acercar" className="round" onClick={() => setZoom((value) => Math.min(4, value + 0.25))}>+</button>
+          <button type="button" aria-label="Alejar" className="round" onClick={() => setZoom((value) => Math.max(1, value - 0.25))}>−</button>
+        </div>
+      )}
+
+      {hint && phase === "planta" && !active && <p className="swipe-hint">Deslizá hacia los laterales</p>}
+
+      {showRail && tower && railOpen && (
+        <aside className="floor-rail" data-testid="floor-rail">
+          <button type="button" className="rail-close" aria-label="Ocultar plantas" onClick={() => setRailOpen(false)}>×</button>
+          {tower.floors.map((item) => {
+            const current = item.id === floorId;
+            return (
+              <button key={item.id} type="button" title={`${item.libres} libres`} className={current ? "level on" : "level"} onClick={() => openFloor(item.id, "replace")}>
+                {floorMark(item.nombre, item.numero)}
+              </button>
+            );
+          })}
+        </aside>
+      )}
+      {showRail && !railOpen && (
+        <button type="button" className="layers-btn" aria-label="Mostrar plantas" onClick={() => setRailOpen(true)}>
+          <span />
+          <span />
+          <span />
+        </button>
+      )}
+
       {active && (
-        <UnitPanel
+        <UnitSheet
           unit={active}
-          projectName={data.project.nombre}
-          compared={compare.includes(active.id)}
+          tab={unitTab}
+          setTab={setUnitTab}
+          project={data.project}
+          plans={data.plans}
+          fallback={data.facade}
+          plantaImagen={data.buildings.flatMap((item) => item.floors).find((item) => item.id === active.floor_id)?.plano ?? null}
+          footprint={data.overlays.find((overlay) => overlay.contenedor === "floor" && overlay.vinculo_id === active.id)?.puntos ?? null}
+          vistaSrc={active.vista_propia ? active.vista_url : (data.scenes.find((item) => item.imagen_url === active.vista_url)?.imagen_url ?? data.scenes.find((item) => item.hotspots.some((hotspot) => hotspot.vinculo_id === active.id))?.imagen_url ?? active.vista_url)}
+          vistaPoints={(data.scenes.find((item) => item.imagen_url === active.vista_url) ?? data.scenes.find((item) => item.hotspots.some((hotspot) => hotspot.vinculo_id === active.id)))
+            ?.hotspots.find((hotspot) => hotspot.vinculo_id === active.id)?.puntos ?? null}
           sent={sent}
           sending={sending}
           error={error}
-          onClose={() => setUnitId(null)}
-          onWhatsapp={() => whatsapp(active)}
-          onShare={() => void share(active)}
-          onCompare={() => toggleCompare(active.id)}
-          onTour={() => active.tour && setSheet("tour")}
-          onVista={() => active.vista_url && setSheet("vista")}
-          onAcabados={() => active.acabados.length && setSheet("acabados")}
           photo={photo}
           setPhoto={setPhoto}
+          onClose={stepBack}
+          onChangeFloor={stepBack}
+          onLocate={locateOnPlan}
+          onWhatsapp={() => whatsapp(active)}
+          onShare={() => void share(active)}
           onLead={submitLead}
         />
       )}
 
       {sheet === "menu" && (
-        <Menu
+        <PhMenu
           lite={lite}
+          brochure={Boolean(data.project.brochure)}
+          redes={data.project.redes}
+          whatsapp={data.project.contacto.whatsapp}
+          brand={data.project.nombre}
+          logo={data.project.logo}
           onClose={() => setSheet(null)}
           onPick={(action) => {
             setSheet(null);
-            if (action === "intro") setEntered(false);
+            if (action === "intro") {
+              setEntered(false);
+              setUnitId(null);
+              setPhase("escena");
+              setDisponibilidad(false);
+              depth.current = 0;
+              const url = new URL(window.location.href);
+              url.search = "";
+              history.replaceState({ showroom: 1, depth: 0 }, "", url.pathname);
+              return;
+            }
             if (action === "edificio") {
+              setDisponibilidad(false);
               const index = walk.findIndex((item) => item.tipo === "exterior");
               setEntered(true);
               setPhase("escena");
+              setUnitId(null);
               if (index >= 0) setSceneIndex(index);
+              return;
             }
-            if (action === "plantas") {
-              const target = building?.floors[0] ?? data.buildings.find((item) => item.floors.length)?.floors[0];
-              if (target) {
-                setEntered(true);
-                if (building) goBuilding(building.id);
-                openFloor(target.id);
-              }
+            if (action === "plantas") { setEntered(true); setDisponibilidad(false); goPlans(); return; }
+            if (action === "disponibilidad") {
+              setEntered(true);
+              setPhase("escena");
+              setUnitId(null);
+              const index = walk.findIndex((item) => item.tipo === "exterior");
+              if (index >= 0) setSceneIndex(index);
+              setDisponibilidad(true);
+              return;
             }
             if (action === "amenities") setSheet("amenities");
-            if (action === "tour") {
-              if (active?.tour) setSheet("tour");
-              else {
-                const index = walk.findIndex((item) => item.video_url);
-                setEntered(true);
-                setPhase("escena");
-                if (index >= 0) setSceneIndex(index);
-                setPlaying(!lite);
-              }
-            }
-            if (action === "video") setPlaying(!lite && Boolean(scene?.video_url));
+            if (action === "recorridos") setSheet("recorridos");
+            if (action === "video") setSheet("video");
             if (action === "galeria") setSheet("galeria");
             if (action === "mapa") setSheet("mapa");
-            if (action === "info") setSheet("info");
+            if (action === "contacto") setSheet("contacto");
+            if (action === "brochure" && data.project.brochure) window.open(data.project.brochure, "_blank", "noopener");
+            if (action === "obra") setSheet("obra");
+            if (action === "pasos") setSheet("pasos");
             if (action === "lite") {
               const next = !lite;
               setLite(next);
               sessionStorage.setItem("adastra-lite", next ? "1" : "0");
               if (next) setPlaying(false);
             }
-            if (action === "full") {
-              if (!document.fullscreenElement) void document.documentElement.requestFullscreen();
-              else void document.exitFullscreen();
-            }
           }}
         />
       )}
 
-      {sheet && sheet !== "menu" && (
+      {sheet === "compartir" && qr && (
+        <div className="absolute right-4 top-20 z-40 w-56 rounded-2xl bg-white p-3 text-center text-[#1c1915] shadow-xl">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={qr} alt="Código QR" className="mx-auto h-44 w-44" />
+          <button type="button" className="mt-2 text-sm underline" onClick={() => void share(active)}>Copiar link</button>
+          {copied && <p className="text-xs text-[#6b6258]">Copiamos el link.</p>}
+          <button type="button" className="mt-2 block w-full text-sm" onClick={() => setSheet(null)}>Cerrar</button>
+        </div>
+      )}
+
+      {sheet === "galeria" && <GalleryStage images={data.gallery} title={data.project.nombre} onClose={() => setSheet(null)} />}
+      {sheet === "amenities" && <AmenityStage amenities={data.amenities} onClose={() => setSheet(null)} />}
+      {sheet === "mapa" && <MapStage project={data.project} pois={data.pois} onClose={() => setSheet(null)} />}
+      {sheet === "recorridos" && (
+        <RecorridoStage
+          options={Array.from(new Map(data.units.filter((unit) => unit.tour).map((unit) => [unit.tipologia, unit.tour!] as const)).entries()).map(([nombre, tour]) => ({ nombre, tour }))}
+          onClose={() => setSheet(null)}
+        />
+      )}
+      {sheet === "video" && <VideoStage src={cover?.video_url ?? null} title={data.project.nombre} onClose={() => setSheet(null)} />}
+      {sheet === "contacto" && <ContactStage project={data.project} organization={data.organization} onWhatsapp={() => whatsapp(null)} onClose={() => setSheet(null)} />}
+
+      {(sheet === "obra" || sheet === "secciones" || sheet === "pasos" || sheet === "comparar") && (
         <Drawer title={sheetTitle(sheet)} onClose={() => setSheet(null)}>
-          {sheet === "filtros" && (
-            <div className="space-y-3 text-sm text-[#1c1915]">
-              <p>{matches.length} coinciden en el edificio. Las demás quedan atenuadas.</p>
-              <Select label="Estado" value={filters.estado} onChange={(estado) => setFilters({ ...filters, estado })} options={[["todos", "Todos"], ["disponible", "Disponible"], ["reservada", "Reservada"], ["vendida", "Vendida"], ["pausa", "En pausa"], ["bloqueada", "Bloqueada"], ["consultar", "Consultar"]]} />
-              <Select label="Ambientes" value={filters.ambientes} onChange={(ambientes) => setFilters({ ...filters, ambientes })} options={[["todos", "Todos"], ...data.filters.ambientes.map((n) => [String(n), String(n)] as [string, string])]} />
-              <Select label="Orientación" value={filters.orientacion} onChange={(orientacion) => setFilters({ ...filters, orientacion })} options={[["todas", "Todas"], ...data.filters.orientaciones.map((n) => [n, n] as [string, string])]} />
-              <label className="block">Precio máximo
-                <input value={filters.precioMax} onChange={(event) => setFilters({ ...filters, precioMax: event.target.value })} inputMode="numeric" className="mt-1 w-full rounded-xl border border-[#e4d9c8] px-3 py-2" placeholder="USD" />
-              </label>
-              {data.filters.fields.map((field) => (
-                <Select
-                  key={field.clave}
-                  label={field.nombre}
-                  value={extra[field.clave] ?? "todos"}
-                  onChange={(value) => setExtra({ ...extra, [field.clave]: value })}
-                  options={field.tipo === "boolean" ? [["todos", "Todos"], ["true", "Sí"], ["false", "No"]] : [["todos", "Todos"], ...field.opciones.map((opcion) => [opcion, opcion] as [string, string])]}
-                />
-              ))}
-              <Select label="Orden al saltar" value={filters.sort} onChange={(sort) => setFilters({ ...filters, sort: sort as FlowFilters["sort"] })} options={[["piso", "Piso"], ["precio", "Precio"], ["superficie", "Superficie"]]} />
-              <div className="flex gap-2">
-                <button type="button" className="rounded-full bg-[#1c1915] px-4 py-2 text-white" onClick={nextMatch}>Siguiente coincidencia</button>
-                <button type="button" className="rounded-full border border-[#e4d9c8] px-4 py-2" onClick={() => { setFilters(EMPTY_FILTERS); setExtra({}); }}>Limpiar</button>
-              </div>
-            </div>
-          )}
-          {sheet === "galeria" && <Gallery images={data.gallery} />}
-          {sheet === "amenities" && (
-            <ul className="space-y-4">
-              {data.amenities.map((amenity) => (
-                <li key={amenity.id}>
-                  {amenity.imagen && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={amenity.imagen} alt="" className="h-40 w-full rounded-2xl object-cover" />
-                  )}
-                  <p className="mt-2 font-serif text-2xl text-[#1c1915]">{amenity.nombre}</p>
-                </li>
-              ))}
-              {!data.amenities.length && <p className="text-sm text-[#6b6258]">Este proyecto todavía no cargó amenities.</p>}
-            </ul>
-          )}
-          {sheet === "mapa" && <MapBlock project={data.project} pois={data.pois} />}
-          {sheet === "info" && (
-            <div className="space-y-3 text-sm text-[#1c1915]">
-              <p>{data.project.descripcion}</p>
-              <p>{data.project.direccion}</p>
-              {data.project.fecha_entrega && <p>Entrega {new Date(data.project.fecha_entrega).toLocaleDateString("es-AR", { month: "long", year: "numeric" })}</p>}
-              <h3 className="font-serif text-2xl">{data.organization.nombre}</h3>
-              <p>{data.organization.descripcion}</p>
-              <p>{data.project.contacto.telefono}</p>
-              <p>{data.project.contacto.email}</p>
-              <div className="flex flex-wrap gap-3">
-                {Object.entries(data.project.redes).map(([red, url]) => (
-                  <a key={red} href={url} className="underline" target="_blank" rel="noreferrer">{red}</a>
-                ))}
-              </div>
-              <button type="button" className="rounded-full bg-[#1f8a5b] px-4 py-2 text-white" onClick={() => whatsapp(null)}>WhatsApp</button>
-            </div>
-          )}
           {sheet === "comparar" && (
             <div className="grid gap-3 md:grid-cols-3">
               {compare.map((id) => {
@@ -650,39 +1466,58 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
                 if (!unit) return null;
                 return (
                   <article key={id} className="rounded-2xl border border-[#e4d9c8] p-3 text-sm text-[#1c1915]">
-                    <p className="font-serif text-2xl">{unit.codigo}</p>
-                    <p>{unit.torre} · {unit.piso}</p>
-                    <p>{unit.estado === "consultar" || unit.precio == null ? "Consultar" : formatUsd(unit.precio)}</p>
-                    <p>{unit.m2_totales ? `${formatM2(unit.m2_totales)} m²` : ""} · {unit.dormitorios ?? "—"} dorm.</p>
+                    <p className="text-2xl">{unit.codigo}</p>
                     <p>{STATUS_LABEL[unit.estado]}</p>
-                    <button type="button" className="mt-2 text-[#9a6240]" onClick={() => toggleCompare(id)}>Quitar</button>
-                    <button type="button" className="mt-2 block" onClick={() => { setSheet(null); chooseUnit(unit, "comparar"); }}>Ver ficha</button>
+                    <button type="button" className="mt-2 block" onClick={() => { setSheet(null); enterUnit(unit, "comparar"); }}>Ver ficha</button>
                   </article>
                 );
               })}
             </div>
           )}
-          {sheet === "tour" && active?.tour && <TourBlock tour={active.tour} />}
-          {sheet === "vista" && active?.vista_url && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={active.vista_url} alt="Vista desde esta altura" className="w-full rounded-2xl" />
+          {sheet === "obra" && (
+            <ol className="space-y-4">
+              {data.progress.map((item) => (
+                <li key={item.id}>
+                  <p className="text-xs uppercase tracking-[0.14em] text-[#9a6240]">{item.fecha}</p>
+                  <p className="text-2xl text-[#1c1915]">{item.titulo}</p>
+                  <p className="text-sm text-[#6b6258]">{item.descripcion}</p>
+                </li>
+              ))}
+            </ol>
           )}
-          {sheet === "acabados" && (
-            <div className="grid grid-cols-2 gap-2">
-              {active?.acabados.map((url) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={url} src={url} alt="Acabado" className="h-28 w-full rounded-xl object-cover" />
+          {sheet === "secciones" && (
+            <div className="space-y-5">
+              {data.sections.map((item) => (
+                <article key={item.id}>
+                  <h3 className="text-2xl text-[#1c1915]">{item.titulo}</h3>
+                  <p className="mt-1 text-sm text-[#1c1915]">{item.cuerpo}</p>
+                </article>
               ))}
             </div>
           )}
-          {sheet === "compartir" && (
-            <div className="space-y-2 text-sm text-[#1c1915]">
-              <button type="button" className="block" onClick={() => void share(active)}>Copiar link</button>
-              {copied && <p>Copiamos el link.</p>}
-            </div>
+          {sheet === "pasos" && (
+            <ol className="space-y-3 text-sm text-[#1c1915]">
+              {data.project.pasos.map((paso, index) => (
+                <li key={paso} className="flex gap-3">
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-[#1c1915] text-xs text-white">{index + 1}</span>
+                  <span className="pt-1">{paso}</span>
+                </li>
+              ))}
+            </ol>
           )}
         </Drawer>
       )}
+
+      {cookies === "ask" && data.project.cookies && (
+        <div className="cookie" data-testid="cookies">
+          <p className="max-w-xl text-sm">{data.project.cookies}</p>
+          <div className="flex gap-2">
+            <button type="button" className="chip" onClick={() => { localStorage.setItem("adastra-cookies", "0"); setCookies("no"); }}>Solo necesarias</button>
+            <button type="button" className="chip chip-solid" onClick={() => { localStorage.setItem("adastra-cookies", "1"); setCookies("yes"); }}>Aceptar</button>
+          </div>
+        </div>
+      )}
+      <Pixels project={data.project} accepted={cookies === "yes"} unitCode={active?.codigo ?? null} />
     </main>
   );
 }
@@ -699,17 +1534,50 @@ function sheetTitle(sheet: Sheet) {
     vista: "Vista",
     acabados: "Acabados",
     compartir: "Compartir",
+    obra: "Avance de obra",
+    secciones: "Secciones",
+    pasos: "Cómo se paga",
   };
   return titles[sheet ?? ""] ?? "";
+}
+
+function HoverTip({ tip, overlays, units }: { tip: { id: string; x: number; y: number }; overlays: Overlay[]; units: Unit[] }) {
+  const overlay = overlays.find((item) => item.id === tip.id);
+  const unit = units.find((item) => item.id === (overlay?.vinculo_id ?? tip.id));
+  if (!unit) return null;
+  return (
+    <div className="unit-tip" style={{ left: tip.x, top: tip.y }}>
+      <p className="font-medium">{unit.codigo} · {STATUS_LABEL[unit.estado]}</p>
+      <p>{unit.tipologia}{unit.m2_totales != null ? ` · ${formatM2(unit.m2_totales)} m²` : ""}</p>
+      <p>{unit.mostrar_precio && unit.precio != null ? formatUsd(unit.precio) : "Consultar"}</p>
+    </div>
+  );
 }
 
 function Stage({
   src,
   cover,
+  focus = { x: 0.5, y: 0.5 },
+  shift = 0,
+  clip,
   zoom,
   pan,
+  soft = false,
+  plate = null,
+  layout = "auto",
+  drop = 0,
+  anchor = null,
+  mask = null,
+  haze = false,
+  arrive = false,
+  onArrived,
+  settle = false,
+  backdrop = null,
+  marks = [],
   video,
+  poster,
   children,
+  veil,
   stageRef,
   onVideoDone,
   onPointerDown,
@@ -719,19 +1587,44 @@ function Stage({
 }: {
   src: string;
   cover: boolean;
+  focus?: { x: number; y: number };
+  shift?: number;
+  clip?: [number, number][];
   zoom: number;
   pan: { x: number; y: number };
+  soft?: boolean;
+  plate?: { x0: number; y0: number; x1: number; y1: number } | null;
+  layout?: "auto" | "slab" | "tall";
+  drop?: number;
+  anchor?: { x: number; y: number } | null;
+  mask?: string | null;
+  haze?: boolean;
+  arrive?: boolean;
+  onArrived?: () => void;
+  settle?: boolean;
+  backdrop?: string | null;
+  marks?: { id: string; x: number; y: number; color: string; label: string; dim: boolean }[];
   video: string | null;
+  poster?: string;
   children?: React.ReactNode;
+  veil?: React.ReactNode;
   stageRef: React.RefObject<HTMLDivElement | null>;
   onVideoDone: () => void;
   onPointerDown: (event: React.PointerEvent) => void;
   onPointerMove: (event: React.PointerEvent) => void;
-  onPointerUp: () => void;
+  onPointerUp: (event: React.PointerEvent) => void;
   onWheel: (event: WheelEvent) => void;
 }) {
   const [box, setBox] = useState({ w: 1, h: 1 });
   const [natural, setNatural] = useState({ w: 16, h: 9 });
+  const [readySrc, setReadySrc] = useState("");
+  const doneRef = useRef(onVideoDone);
+  doneRef.current = onVideoDone;
+  useEffect(() => {
+    if (!video) return;
+    const timer = window.setTimeout(() => doneRef.current(), 20000);
+    return () => window.clearTimeout(timer);
+  }, [video]);
   useEffect(() => {
     const node = stageRef.current;
     if (!node) return;
@@ -747,18 +1640,32 @@ function Stage({
     node.addEventListener("wheel", listener, { passive: false });
     return () => node.removeEventListener("wheel", listener);
   }, [onWheel, stageRef]);
-  const frame = cover ? { left: 0, top: 0, width: box.w, height: box.h } : contain(box.w, box.h, natural.w, natural.h);
+  const frame = layout === "tall"
+    ? fitWidthFrame(box.w, box.h, natural.w, natural.h)
+    : layout === "slab"
+      ? slabFrame(box.w, box.h, natural.w, natural.h, drop, anchor)
+      : plate
+        ? plateFrame(box.w, box.h, natural.w, natural.h, plate)
+        : cover
+          ? coverFrame(box.w, box.h, natural.w, natural.h, focus.x, focus.y, shift)
+          : contain(box.w, box.h, natural.w, natural.h);
   return (
     <div
       ref={stageRef}
-      className="absolute inset-0"
+      className="absolute inset-0 touch-none overflow-hidden"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
       onPointerLeave={onPointerUp}
     >
+      {backdrop && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={backdrop} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-cover" style={{ filter: "blur(6px) saturate(0.6)", transform: "scale(1.08)" }} />
+      )}
+      {haze && <div className="stage-haze" />}
       <div
-        className="absolute"
+        className={arrive && readySrc === src ? "absolute arrive-frame" : "absolute"}
         style={{
           left: frame.left,
           top: frame.top,
@@ -773,34 +1680,58 @@ function Stage({
           key={src}
           src={src}
           alt=""
-          className="stage-fade h-full w-full object-fill"
+          className={`stage-fade h-full w-full object-fill ${soft ? "stage-soft" : ""} ${layout === "slab" && !mask ? "slab-photo" : ""} ${settle ? "settle" : ""}`}
           draggable={false}
+          style={mask ? { WebkitMaskImage: `url(${mask})`, maskImage: `url(${mask})`, maskSize: "100% 100%", maskRepeat: "no-repeat", filter: "drop-shadow(0 18px 28px rgba(0,0,0,0.5))" } : undefined}
+          onAnimationEnd={(event) => {
+            if (event.animationName === "fly-in") onArrived?.();
+          }}
           onLoad={(event) => {
             const img = event.currentTarget;
             if (img.naturalWidth) setNatural({ w: img.naturalWidth, h: img.naturalHeight });
+            setReadySrc(src);
           }}
         />
         {video && (
           <video
             key={video}
             src={video}
+            poster={poster}
             autoPlay
             muted
             playsInline
-            className="absolute inset-0 h-full w-full object-fill"
+            preload="auto"
+            className="clip absolute inset-0 h-full w-full object-fill"
+            onCanPlay={(event) => {
+              const node = event.currentTarget;
+              void node.play().catch(() => doneRef.current());
+            }}
+            onPlaying={(event) => { event.currentTarget.dataset.ready = "1"; }}
             onEnded={onVideoDone}
             onError={onVideoDone}
           />
         )}
-        <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
-          {children}
-        </svg>
+        <div
+          className="absolute inset-0"
+          style={clip && clip.length >= 3 ? { clipPath: `polygon(${clip.map(([x, y]) => `${x * 100}% ${y * 100}%`).join(",")})` } : undefined}
+        >
+          <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="hotspots absolute inset-0 h-full w-full">
+            {children}
+          </svg>
+          {veil}
+        </div>
+        {marks.map((mark) => (
+          <span key={mark.id} className={mark.dim ? "plan-pill dim" : "plan-pill"} style={{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%` }}>
+            <i style={{ background: mark.color }} />
+            {mark.label}
+          </span>
+        ))}
       </div>
     </div>
   );
 }
 
-function Menu({ lite, onClose, onPick }: { lite: boolean; onClose: () => void; onPick: (action: string) => void }) {
+function Menu({ lite, extras, onClose, onPick }: { lite: boolean; extras: [string, string][]; onClose: () => void; onPick: (action: string) => void }) {
   const items = [
     ["intro", "Intro"],
     ["edificio", "El edificio"],
@@ -811,6 +1742,7 @@ function Menu({ lite, onClose, onPick }: { lite: boolean; onClose: () => void; o
     ["galeria", "Galería"],
     ["mapa", "Ubicación"],
     ["info", "Contacto"],
+    ...extras,
   ];
   return (
     <div className="absolute inset-0 z-40 bg-[#12110f]/94">
@@ -828,10 +1760,11 @@ function Menu({ lite, onClose, onPick }: { lite: boolean; onClose: () => void; o
 
 function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <aside className="absolute inset-x-0 bottom-0 z-30 max-h-[78vh] overflow-auto rounded-t-3xl bg-[#f6f1e8] p-5 text-[#1c1915] shadow-2xl md:inset-y-0 md:right-0 md:left-auto md:max-h-none md:w-[420px] md:rounded-none">
+    <aside className="drawer sheet absolute inset-x-0 bottom-0 z-30 max-h-[78vh] overflow-auto rounded-t-3xl p-5 text-[#1c1915] md:inset-y-0 md:right-0 md:left-auto md:max-h-none md:w-[420px] md:rounded-none">
+      <div className="handle" />
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-serif text-3xl">{title}</h2>
-        <button type="button" onClick={onClose}>Cerrar</button>
+        <button type="button" className="round" aria-label="Cerrar" onClick={onClose}>×</button>
       </div>
       {children}
     </aside>
@@ -874,22 +1807,33 @@ function Gallery({ images }: { images: { id: string; nombre: string; url: string
 function MapBlock({ project, pois }: { project: ShowroomData["project"]; pois: ShowroomData["pois"] }) {
   const lat = project.lat;
   const lng = project.lng;
+  const [active, setActive] = useState<string | null>(null);
   if (lat == null || lng == null) return <p className="text-sm text-[#6b6258]">El proyecto todavía no tiene coordenadas.</p>;
-  const bbox = `${lng - 0.02}%2C${lat - 0.015}%2C${lng + 0.02}%2C${lat + 0.015}`;
+  const selected = pois.find((poi) => poi.id === active) ?? null;
   return (
     <div className="space-y-3 text-sm text-[#1c1915]">
-      <iframe title="Mapa" className="h-56 w-full rounded-2xl border-0" src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lng}`} />
-      <div className="flex flex-wrap gap-2">
-        <a className="rounded-full bg-[#1c1915] px-3 py-1 text-white" href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`} target="_blank" rel="noreferrer">En auto</a>
-        <a className="rounded-full border border-[#e4d9c8] px-3 py-1" href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking`} target="_blank" rel="noreferrer">Caminando</a>
-        <a className="rounded-full border border-[#e4d9c8] px-3 py-1" href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=transit`} target="_blank" rel="noreferrer">En transporte</a>
-      </div>
+      <PoiMap lat={lat} lng={lng} nombre={project.nombre} pois={pois} selectedId={active} onSelect={setActive} className="h-64 w-full overflow-hidden rounded-2xl md:h-80" />
+      <p className="text-xs text-[#6b6258]">Los puntos cercanos son de demostración. La línea es un recorrido orientativo, no un camino real.</p>
+      {selected && (
+        <div className="rounded-2xl bg-white p-3">
+          <p className="font-medium">{selected.nombre}</p>
+          <p className="text-[#6b6258]">{poiLabel(selected.categoria)}{selected.distancia_m != null ? ` · ${selected.distancia_m} m` : ""}</p>
+          {selected.distancia_m != null && (
+            <p className="text-[#6b6258]">A pie unos {travelMinutes(selected.distancia_m, 4.5)} min · en auto unos {travelMinutes(selected.distancia_m, 28)} min</p>
+          )}
+          {selected.descripcion && <p className="mt-1">{selected.descripcion}</p>}
+        </div>
+      )}
       <ul className="space-y-2">
         {pois.map((poi) => (
           <li key={poi.id}>
-            <p className="font-medium">{poi.nombre}</p>
-            <p className="text-[#6b6258]">{poi.categoria}{poi.distancia_m != null ? ` · ${poi.distancia_m} m` : ""}</p>
-            <p>{poi.descripcion}</p>
+            <button type="button" className={`flex w-full items-start gap-2 rounded-2xl px-2 py-2 text-left ${active === poi.id ? "bg-white" : ""}`} onClick={() => setActive(poi.id)}>
+              <i className="mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: poiColor(poi.categoria) }} />
+              <span>
+                <span className="block font-medium">{poi.nombre}</span>
+                <span className="text-[#6b6258]">{poiLabel(poi.categoria)}{poi.distancia_m != null ? ` · ${poi.distancia_m} m` : ""}</span>
+              </span>
+            </button>
           </li>
         ))}
       </ul>
@@ -911,9 +1855,63 @@ function TourBlock({ tour }: { tour: NonNullable<Unit["tour"]> }) {
   return <iframe title={tour.titulo} src={tour.url} className="h-80 w-full rounded-2xl border-0" allow="fullscreen; xr-spatial-tracking" />;
 }
 
+function moneyLabel(value: number, moneda: "USD" | "ARS") {
+  if (moneda === "USD") return formatUsd(value);
+  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(value);
+}
+
+function safeId(value: string, pattern: RegExp) {
+  return pattern.test(value) ? value : "";
+}
+
+function Pixels({ project, accepted, unitCode }: { project: ShowroomData["project"]; accepted: boolean; unitCode: string | null }) {
+  useEffect(() => {
+    if (!accepted) return;
+    const ga4 = safeId(project.ga4, /^G-[A-Z0-9]+$/);
+    const gtm = safeId(project.gtm, /^GTM-[A-Z0-9]+$/);
+    const pixel = safeId(project.pixel, /^\d{5,20}$/);
+    if (ga4 && !document.getElementById("adastra-ga4")) {
+      const src = document.createElement("script");
+      src.id = "adastra-ga4";
+      src.async = true;
+      src.src = `https://www.googletagmanager.com/gtag/js?id=${ga4}`;
+      document.head.appendChild(src);
+      const inline = document.createElement("script");
+      inline.id = "adastra-ga4-inline";
+      inline.text = `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${ga4}');`;
+      document.head.appendChild(inline);
+    }
+    if (gtm && !document.getElementById("adastra-gtm")) {
+      const inline = document.createElement("script");
+      inline.id = "adastra-gtm";
+      inline.text = `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${gtm}');`;
+      document.head.appendChild(inline);
+    }
+    if (pixel && !document.getElementById("adastra-pixel")) {
+      const inline = document.createElement("script");
+      inline.id = "adastra-pixel";
+      inline.text = `!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${pixel}');fbq('track','PageView');`;
+      document.head.appendChild(inline);
+    }
+  }, [accepted, project.ga4, project.gtm, project.pixel]);
+
+  useEffect(() => {
+    if (!accepted || !project.remarketing || !unitCode) return;
+    const pixel = safeId(project.pixel, /^\d{5,20}$/);
+    if (!pixel) return;
+    const fbq = (window as Window & { fbq?: (...args: unknown[]) => void }).fbq;
+    fbq?.("track", "ViewContent", { content_ids: [unitCode], content_type: "product" });
+  }, [accepted, project.remarketing, project.pixel, unitCode]);
+
+  return null;
+}
+
 function UnitPanel({
   unit,
-  projectName,
+  project,
+  plans,
+  fallback,
+  plantaImagen,
   compared,
   sent,
   sending,
@@ -930,7 +1928,10 @@ function UnitPanel({
   onLead,
 }: {
   unit: Unit;
-  projectName: string;
+  project: ShowroomData["project"];
+  plans: ShowroomData["plans"];
+  fallback: string;
+  plantaImagen: string | null;
   compared: boolean;
   sent: boolean;
   sending: boolean;
@@ -946,16 +1947,83 @@ function UnitPanel({
   setPhoto: (index: number) => void;
   onLead: (form: FormData) => void;
 }) {
-  const photos = unit.renders.length ? unit.renders : unit.plano ? [unit.plano] : [];
+  const ficha = project.ficha;
+  const sinPlano = !unit.plano;
+  const photos = [
+    ...(unit.plano ? [unit.plano] : []),
+    ...unit.renders,
+    ...(!unit.plano && plantaImagen ? [plantaImagen] : []),
+  ];
+  if (!photos.length) photos.push(fallback);
   const current = photos[photo] ?? photos[0];
+  const [planId, setPlanId] = useState(plans[0]?.id ?? "");
+  const [buyer, setBuyer] = useState("");
+  const [mail, setMail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  useEffect(() => {
+    setPlanId(plans[0]?.id ?? "");
+    setNote("");
+  }, [unit.id, plans]);
+  const plan = plans.find((item) => item.id === planId) ?? plans[0];
+  const available = unit.estado === "disponible";
+  const showPrice = available && ficha.precio && unit.mostrar_precio && unit.precio != null;
+  const shown = showPrice && plan ? showQuote(unit.precio as number, plan, project.usdArs, project.cac) : null;
+
+  async function downloadQuote() {
+    if (!plan) return;
+    if (!buyer.trim()) {
+      setNote("Escribí un nombre para la cotización.");
+      return;
+    }
+    setBusy(true);
+    setNote("");
+    const response = await fetch("/api/public/cotizacion", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slug: project.slug, codigo: unit.codigo, planId: plan.id, nombre: buyer, email: mail }),
+    });
+    setBusy(false);
+    if (!response.ok) {
+      const json = await response.json().catch(() => ({}));
+      setNote(typeof json.error === "string" ? json.error : "No pudimos armar la cotización.");
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `cotizacion-${unit.codigo}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setNote(mail ? "Descargamos el PDF. Si el correo está activo, también se lo mandamos." : "Descargamos el PDF.");
+  }
+
+  async function emailSheet() {
+    if (!mail.trim()) {
+      setNote("Escribí un email para enviar la ficha.");
+      return;
+    }
+    setBusy(true);
+    const response = await fetch("/api/public/ficha", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slug: project.slug, codigo: unit.codigo, email: mail }),
+    });
+    const json = await response.json().catch(() => ({}));
+    setBusy(false);
+    setNote(typeof json.message === "string" ? json.message : "No pudimos enviar la ficha.");
+  }
+
   return (
-    <aside data-testid="unit-panel" className="absolute inset-x-0 bottom-0 z-30 max-h-[78vh] overflow-auto rounded-t-3xl bg-white text-[#1c1915] shadow-2xl md:inset-y-0 md:left-0 md:right-auto md:max-h-none md:w-[400px] md:rounded-none">
+    <aside data-testid="unit-panel" className="unit-card sheet absolute inset-x-0 bottom-0 z-30 max-h-[78vh] overflow-auto rounded-t-3xl text-[#1c1915] md:inset-y-0 md:left-0 md:right-auto md:max-h-none md:w-[400px] md:rounded-none">
+      <div className="handle md:hidden" />
       <div className="relative">
         {current && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={current} alt="" className="h-52 w-full object-cover" />
         )}
-        <button type="button" className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1 text-sm" onClick={onClose}>Cerrar</button>
+        <button type="button" className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1 text-sm shadow" onClick={onClose}>Cerrar</button>
         {photos.length > 1 && (
           <div className="absolute bottom-3 right-3 flex gap-1">
             {photos.map((url, index) => (
@@ -968,13 +2036,25 @@ function UnitPanel({
         <span className="inline-block rounded-full px-2 py-0.5 text-xs text-white" style={{ background: STATUS_COLOR[unit.estado] }}>{STATUS_LABEL[unit.estado]}</span>
         <h2 className="font-serif text-4xl">{unit.codigo}</h2>
         <p className="text-sm text-[#6b6258]">{unit.tipologia} · {unit.torre} · {unit.piso}</p>
-        <p className="text-2xl">{unit.mostrar_precio && unit.precio != null ? formatUsd(unit.precio) : "Consultar"}</p>
+        {sinPlano && <p className="text-sm text-[#6b6258]">Esta unidad no tiene un plano propio. La marcamos en la planta.</p>}
+        <div>
+          <p className="text-xs uppercase tracking-[0.16em] text-[#6b6258]">Vista</p>
+          {unit.vista_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={unit.vista_url} alt={unit.orientacion ? `Vista al ${unit.orientacion}` : "Vista de la unidad"} className="mt-2 h-36 w-full rounded-2xl object-cover" style={{ objectPosition: unit.vista_encuadre }} />
+          ) : (
+            <p className="mt-2 rounded-2xl bg-[#f4efe6] px-3 py-6 text-sm text-[#6b6258]">Esta unidad todavía no tiene una vista cargada.</p>
+          )}
+        </div>
+        {unit.estado !== "disponible" && <p className="text-sm text-[#8a8178]">Esta unidad no está disponible</p>}
+        {showPrice && <p className="font-serif text-3xl">{formatUsd(unit.precio as number)}</p>}
         <dl className="grid grid-cols-2 gap-2 text-sm">
-          {unit.m2_totales != null && <div><dt className="text-[#6b6258]">Superficie</dt><dd>{formatM2(unit.m2_totales)} m²</dd></div>}
+          {unit.m2_cubiertos != null && <div><dt className="text-[#6b6258]">Cubiertos</dt><dd>{formatM2(unit.m2_cubiertos)} m²</dd></div>}
+          {unit.m2_totales != null && <div><dt className="text-[#6b6258]">Totales</dt><dd>{formatM2(unit.m2_totales)} m²</dd></div>}
           {unit.dormitorios != null && <div><dt className="text-[#6b6258]">Dormitorios</dt><dd>{unit.dormitorios}</dd></div>}
           {unit.banos != null && <div><dt className="text-[#6b6258]">Baños</dt><dd>{unit.banos}</dd></div>}
           {unit.orientacion && <div><dt className="text-[#6b6258]">Orientación</dt><dd>{unit.orientacion}</dd></div>}
-          {unit.ambientes != null && <div><dt className="text-[#6b6258]">Ambientes</dt><dd>{unit.ambientes}</dd></div>}
+          {ficha.ambientes && unit.ambientes != null && <div><dt className="text-[#6b6258]">Ambientes</dt><dd>{unit.ambientes}</dd></div>}
           {unit.vista && <div><dt className="text-[#6b6258]">Vista</dt><dd>{unit.vista}</dd></div>}
         </dl>
         {unit.descripcion && <p className="text-sm">{unit.descripcion}</p>}
@@ -984,14 +2064,34 @@ function UnitPanel({
             <li key={field.clave}>{field.nombre}: {typeof field.value === "boolean" ? (field.value ? "sí" : "no") : typeof field.value === "number" ? `${formatNumber(field.value)}${field.unidad ? ` ${field.unidad}` : ""}` : String(field.value)}</li>
           ))}
         </ul>
-        {unit.quote && <p className="text-sm text-[#6b6258]">{unit.quote.plan}: cuota {formatUsd(unit.quote.quote.cuota)}. {unit.quote.legal}</p>}
-        <div className="flex flex-wrap gap-2 text-sm">
-          <button type="button" className="rounded-full bg-[#1f8a5b] px-4 py-2 text-white" onClick={onWhatsapp}>WhatsApp</button>
-          {unit.tour && <button type="button" className="rounded-full border border-[#e4d9c8] px-4 py-2" onClick={onTour}>Tour 360</button>}
-          {unit.vista_url && <button type="button" className="rounded-full border border-[#e4d9c8] px-4 py-2" onClick={onVista}>Vista</button>}
-          {unit.acabados.length > 0 && <button type="button" className="rounded-full border border-[#e4d9c8] px-4 py-2" onClick={onAcabados}>Acabados</button>}
-          <button type="button" className="rounded-full border border-[#e4d9c8] px-4 py-2" onClick={onCompare}>{compared ? "En el comparador" : "Comparar"}</button>
-          <button type="button" className="rounded-full border border-[#e4d9c8] px-4 py-2" onClick={onShare}>Compartir</button>
+        {shown && plan && (
+          <div className="space-y-2 rounded-2xl bg-white/70 p-3" data-testid="cotizador">
+            <label className="block text-sm">Esquema de pago
+              <select value={plan.id} onChange={(event) => setPlanId(event.target.value)} className="field mt-1">
+                {plans.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
+              </select>
+            </label>
+            <div className="quote-grid text-sm">
+              <div><p className="text-[#6b6258]">Anticipo</p><p>{moneyLabel(shown.anticipo, shown.moneda)}</p></div>
+              <div><p className="text-[#6b6258]">{plan.cuotas} cuotas</p><p>{moneyLabel(shown.cuota, shown.moneda)}</p></div>
+              <div><p className="text-[#6b6258]">Última cuota</p><p>{moneyLabel(shown.ultima, shown.moneda)}</p></div>
+              <div><p className="text-[#6b6258]">Saldo a posesión</p><p>{moneyLabel(shown.saldo, shown.moneda)}</p></div>
+            </div>
+            {shown.refuerzos.map((item) => (
+              <p key={item.meses.join("-")} className="text-xs text-[#6b6258]">Refuerzo {item.pct}% en el mes {item.meses.join(" y ")}: {moneyLabel(item.monto, shown.moneda)}</p>
+            ))}
+            {shown.indice && <p className="text-xs text-[#6b6258]">{shown.indice}</p>}
+            <p className="text-xs text-[#6b6258]">{shown.legal}</p>
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {ficha.whatsapp && <button type="button" className="chip chip-wa" onClick={onWhatsapp}>WhatsApp</button>}
+          {unit.tour && <button type="button" className="chip" onClick={onTour}>Tour 360</button>}
+          {unit.vista_url && <button type="button" className="chip" onClick={onVista}>Vista</button>}
+          {unit.acabados.length > 0 && <button type="button" className="chip" onClick={onAcabados}>Acabados</button>}
+          <button type="button" className="chip" onClick={onCompare}>{compared ? "En el comparador" : "Comparar"}</button>
+          {ficha.compartir && <button type="button" className="chip" onClick={onShare}>Compartir</button>}
+          {available && ficha.pdf && <a className="chip" href={`/api/public/ficha?slug=${project.slug}&codigo=${encodeURIComponent(unit.codigo)}`} target="_blank" rel="noreferrer">Ficha PDF</a>}
         </div>
         {unit.plano && photos[0] !== unit.plano && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -1003,11 +2103,24 @@ function UnitPanel({
             <input name="nombre" required placeholder="Nombre" className="w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
             <input name="email" type="email" placeholder="Email" className="w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
             <input name="telefono" placeholder="Teléfono" className="w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
-            <textarea name="mensaje" rows={2} placeholder={`Hola, quiero saber más de ${unit.codigo} en ${projectName}`} className="w-full rounded-xl border border-[#e4d9c8] px-3 py-2" />
+            <textarea name="mensaje" rows={2} placeholder={`Hola, quiero saber más de ${unit.codigo} en ${project.nombre}`} className="field" />
             {error && <p className="text-sm text-[#b42318]">{error}</p>}
-            <button disabled={sending} className="rounded-full bg-[#1c1915] px-4 py-2 text-sm text-white">{sending ? "Enviando…" : "Enviar consulta"}</button>
+            <button disabled={sending} className="chip chip-solid">{sending ? "Enviando…" : "Enviar consulta"}</button>
           </form>
         )}
+        {shown && (
+          <div className="space-y-2 border-t border-[#e4d9c8] pt-3">
+            <p className="text-sm font-medium">Cotización en PDF</p>
+            <input value={buyer} onChange={(event) => setBuyer(event.target.value)} placeholder="Nombre" className="field" />
+            <input value={mail} onChange={(event) => setMail(event.target.value)} type="email" placeholder="Email" className="field" />
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={busy} className="chip chip-accent" onClick={() => void downloadQuote()}>{busy ? "Armando…" : "Descargar cotización"}</button>
+              {ficha.pdf && <button type="button" disabled={busy} className="chip" onClick={() => void emailSheet()}>Enviar ficha</button>}
+            </div>
+            {note && <p className="text-xs text-[#6b6258]">{note}</p>}
+          </div>
+        )}
+        {project.legal && <p className="text-xs text-[#6b6258]">{project.legal}</p>}
       </div>
     </aside>
   );

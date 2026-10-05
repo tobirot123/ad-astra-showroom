@@ -1,0 +1,819 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { PoiMap } from "@/components/maps/poi-map";
+import { illustrativeInterior } from "@/lib/domain/gallery-rank";
+import { showQuote } from "@/lib/domain/finance";
+import { STATUS_COLOR, STATUS_LABEL, formatM2, formatNumber, formatUsd } from "@/lib/domain/format";
+import { poiLabel } from "@/lib/domain/poi";
+import { tourEmbed } from "@/lib/domain/showroom-flow";
+import type { ShowroomData } from "@/lib/services/present";
+
+type Unit = ShowroomData["units"][number];
+type Tab = "galeria" | "vistas" | "planta3d" | "planos" | "recorrido" | "video";
+type Tour = NonNullable<Unit["tour"]>;
+
+export function QrIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <path fill="currentColor" d="M1 1h6v6H1V1zm1.4 1.4v3.2h3.2V2.4H2.4zM9 1h6v6H9V1zm1.4 1.4v3.2h3.2V2.4h-3.2zM1 9h6v6H1V9zm1.4 1.4v3.2h3.2v-3.2H2.4zM9 9h2v2H9V9zm4 0h2v2h-2V9zM9 13h2v2H9v-2zm4 0h2v2h-2v-2z" />
+    </svg>
+  );
+}
+
+export function FullIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+      <path fill="none" stroke="currentColor" strokeWidth="1.4" d="M5 1.5H1.5V5M10 1.5h3.5V5M5 13.5H1.5V10M10 13.5h3.5V10" />
+    </svg>
+  );
+}
+
+function statusTone(estado: string) {
+  if (estado === "disponible") return { color: "#12b76a", bg: "#e8f9f0", label: "Disponible" };
+  if (estado === "reservada") return { color: "#a15c07", bg: "#fef7e6", label: "Reservada" };
+  if (estado === "vendida") return { color: "#de7777", bg: "#fdecec", label: "Vendida" };
+  return { color: STATUS_COLOR[estado] ?? "#667085", bg: "#f2f4f7", label: STATUS_LABEL[estado] ?? estado };
+}
+
+export function HoverCard({
+  unit,
+  x,
+  y,
+  onEnter,
+  onTour,
+  onKeep,
+  onLeave,
+}: {
+  unit: Unit;
+  x: number;
+  y: number;
+  onEnter: () => void;
+  onTour: () => void;
+  onKeep: () => void;
+  onLeave: () => void;
+}) {
+  const tone = statusTone(unit.estado);
+  const price = unit.mostrar_precio && unit.precio != null ? formatUsd(unit.precio) : "Consultar precio";
+  return (
+    <div className="hover-card" data-testid="hover-card" style={{ left: x, top: y }} onMouseEnter={onKeep} onMouseLeave={onLeave}>
+      <p className="status-line" style={{ color: tone.color }}>{tone.label.toUpperCase()} <i /></p>
+      <p className="mt-0.5 text-center text-xl font-semibold tracking-wide">{unit.codigo}</p>
+      <div className="mt-2 flex items-center justify-center gap-3 text-[12px] text-[#8a7358]">
+        <span>▦ {unit.m2_totales != null ? `${formatM2(unit.m2_totales)} m²` : "—"}</span>
+        <span>⌂ {unit.dormitorios ?? "—"}</span>
+        <span>◈ {unit.banos ?? "—"}</span>
+      </div>
+      <div className="mt-2 flex gap-2">
+        <button type="button" className="outline-pill flex-1" onClick={onEnter}>{unit.estado === "disponible" ? price : "No disponible"}</button>
+        {unit.tour && <button type="button" className="outline-pill flex-1" onClick={onTour}>Tour 360°</button>}
+      </div>
+      <button type="button" className="enter-btn mt-3" onClick={onEnter}>Ingresar</button>
+    </div>
+  );
+}
+
+const MENU = [
+  ["intro", "Intro"],
+  ["edificio", "El edificio"],
+  ["plantas", "Plantas"],
+  ["disponibilidad", "Disponibilidad"],
+  ["amenities", "Amenities"],
+  ["recorridos", "Recorridos 360"],
+  ["video", "Video"],
+  ["brochure", "Brochure"],
+  ["mapa", "Ubicación"],
+  ["contacto", "Contacto"],
+] as const;
+
+export function PhMenu({
+  lite,
+  brochure,
+  redes,
+  whatsapp,
+  brand,
+  logo,
+  onClose,
+  onPick,
+}: {
+  lite: boolean;
+  brochure: boolean;
+  redes: Record<string, string>;
+  whatsapp: string;
+  brand: string;
+  logo: string | null;
+  onClose: () => void;
+  onPick: (action: string) => void;
+}) {
+  return (
+    <>
+      <button type="button" className="scrim" aria-label="Cerrar menú" onClick={onClose} />
+      <aside className="drawer-ph" data-testid="drawer-menu">
+        <div className="flex items-start justify-between px-6 pt-6">
+          <div>
+            {logo && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logo} alt="" className="mb-2 h-10 w-auto" />
+            )}
+            <p className="text-2xl tracking-[0.18em]">{brand}</p>
+          </div>
+          <button type="button" aria-label="Cerrar" className="round" onClick={onClose}>×</button>
+        </div>
+        <nav className="mt-6 px-6">
+          {MENU.map(([action, label]) => (
+            <button key={action} type="button" className="row" disabled={action === "brochure" && !brochure} onClick={() => onPick(action)}>
+              <MenuGlyph name={action} />
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="mt-8 flex items-center gap-3 px-6 text-sm">
+          {Object.entries(redes).map(([red, url]) => (
+            <a key={red} href={url} target="_blank" rel="noreferrer" className="grid h-9 w-9 place-items-center rounded-full border border-[#ece7e1]">{red.slice(0, 1).toUpperCase()}</a>
+          ))}
+          {whatsapp && (
+            <a href={`https://wa.me/${whatsapp}`} target="_blank" rel="noreferrer" className="grid h-9 w-9 place-items-center rounded-full border border-[#ece7e1]">W</a>
+          )}
+        </div>
+        <button type="button" className="mt-6 px-6 pb-8 text-left text-sm text-[#8a8178]" onClick={() => onPick("lite")}>{lite ? "Ver con videos" : "Solo imágenes"}</button>
+      </aside>
+    </>
+  );
+}
+
+function MenuGlyph({ name }: { name: string }) {
+  const common = { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.3 };
+  if (name === "intro") return <svg {...common}><path d="M3 12.5V3.5h10v9" /><path d="M2 12.5h12" /></svg>;
+  if (name === "edificio") return <svg {...common}><path d="M4 13V3h5v10M9 7h3v6" /></svg>;
+  if (name === "plantas") return <svg {...common}><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" /></svg>;
+  if (name === "disponibilidad") return <svg {...common}><circle cx="8" cy="8" r="3" /></svg>;
+  if (name === "amenities") return <svg {...common}><path d="M8 2.5l1.4 3.2H13l-2.6 2 1 3.3L8 9.8 4.6 11l1-3.3L3 5.7h3.6z" /></svg>;
+  if (name === "recorridos") return <svg {...common}><circle cx="8" cy="8" r="5" /><path d="M8 5.5v3l2 1.2" /></svg>;
+  if (name === "video") return <svg {...common}><circle cx="8" cy="8" r="5" /><path d="M7 6.2v3.6l3-1.8z" fill="currentColor" stroke="none" /></svg>;
+  if (name === "brochure") return <svg {...common}><path d="M4 2.5h6l2.5 2.5V13.5H4z" /></svg>;
+  if (name === "mapa") return <svg {...common}><path d="M8 13s4-3.2 4-6.2A4 4 0 0 0 4 6.8C4 9.8 8 13 8 13z" /><circle cx="8" cy="6.7" r="1.2" /></svg>;
+  return <svg {...common}><path d="M3 4.5h10v7H3z" /><path d="M3 6.5l5 3 5-3" /></svg>;
+}
+
+export function GalleryStage({ images, title, onClose }: { images: { id: string; nombre: string; url: string }[]; title: string; onClose: () => void }) {
+  const [index, setIndex] = useState(0);
+  const current = images[index];
+  return (
+    <section className="full-stage">
+      <StageBar title={title} onClose={onClose} />
+      {current && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={current.url} alt={current.nombre} className="h-full w-full object-contain" />
+      )}
+      <Arrows index={index} total={images.length} onChange={setIndex} />
+      {current && <p className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-4 py-1 text-sm">{current.nombre}</p>}
+    </section>
+  );
+}
+
+export function AmenityStage({ amenities, onClose }: { amenities: ShowroomData["amenities"]; onClose: () => void }) {
+  const [index, setIndex] = useState(0);
+  const current = amenities[index];
+  return (
+    <section className="full-stage">
+      <div className="absolute left-4 right-4 top-4 z-10 flex items-center gap-3">
+        <button type="button" className="round" onClick={onClose} aria-label="Cerrar">×</button>
+        <select value={index} onChange={(event) => setIndex(Number(event.target.value))} className="rounded-full bg-white px-3 py-2 text-sm text-[#1c1915]">
+          {amenities.map((item, itemIndex) => <option key={item.id} value={itemIndex}>{item.nombre}</option>)}
+        </select>
+      </div>
+      {current?.imagen && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={current.imagen} alt="" className="h-full w-full object-cover" />
+      )}
+      <p className="absolute bottom-8 left-8 text-3xl">{current?.nombre}</p>
+      <Arrows index={index} total={amenities.length} onChange={setIndex} />
+      {!amenities.length && <p className="grid h-full place-items-center">Este proyecto todavía no cargó amenities.</p>}
+    </section>
+  );
+}
+
+export function MapStage({ project, pois, onClose }: { project: ShowroomData["project"]; pois: ShowroomData["pois"]; onClose: () => void }) {
+  const [active, setActive] = useState<string | null>(null);
+  const [cat, setCat] = useState("todas");
+  const categories = Array.from(new Set(pois.map((poi) => poi.categoria)));
+  const shown = cat === "todas" ? pois : pois.filter((poi) => poi.categoria === cat);
+  const selected = pois.find((poi) => poi.id === active) ?? null;
+  return (
+    <section className="full-stage bg-[#f4f1ea]" style={{ height: "100dvh" }}>
+      <div className="map-filters absolute left-4 right-4 top-4 z-10 flex flex-wrap items-center gap-2">
+        <button type="button" className="round" onClick={onClose} aria-label="Cerrar">×</button>
+        <span className="rounded-full bg-white px-3 py-2 text-sm text-[#1c1915]">{project.nombre}</span>
+        <button type="button" className={cat === "todas" ? "pill on" : "pill"} onClick={() => setCat("todas")}>Todo</button>
+        {categories.map((item) => (
+          <button key={item} type="button" className={cat === item ? "pill on" : "pill"} onClick={() => setCat(item)}>{poiLabel(item)}</button>
+        ))}
+      </div>
+      {project.lat != null && project.lng != null && (
+        <PoiMap lat={project.lat} lng={project.lng} nombre={project.nombre} pois={shown} selectedId={active} onSelect={setActive} className="absolute inset-0" />
+      )}
+      {selected && (
+        <div className="absolute bottom-6 left-1/2 z-10 w-[min(24rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl bg-white p-4 text-[#1c1915] shadow-xl">
+          <p className="text-lg">{selected.nombre}</p>
+          <p className="text-sm text-[#6b6258]">{poiLabel(selected.categoria)}{selected.distancia_m != null ? ` · ${selected.distancia_m} m` : ""}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function RecorridoStage({ options, onClose }: { options: { nombre: string; tour: Tour }[]; onClose: () => void }) {
+  const [index, setIndex] = useState(0);
+  const current = options[index];
+  return (
+    <section className="full-stage">
+      <div className="absolute left-4 top-4 z-10 flex items-center gap-2">
+        <button type="button" className="round" onClick={onClose} aria-label="Cerrar">×</button>
+        {options.length > 0 && (
+          <select value={index} onChange={(event) => setIndex(Number(event.target.value))} className="rounded-full bg-white px-3 py-2 text-sm text-[#1c1915]">
+            {options.map((item, itemIndex) => <option key={item.nombre} value={itemIndex}>{item.nombre}</option>)}
+          </select>
+        )}
+      </div>
+      {current ? <Panorama tour={current.tour} /> : <p className="grid h-full place-items-center px-6 text-center">Este proyecto todavía no tiene recorridos 360.</p>}
+    </section>
+  );
+}
+
+export function VideoStage({ src, title, onClose }: { src: string | null; title: string; onClose: () => void }) {
+  return (
+    <section className="full-stage">
+      <StageBar title={title} onClose={onClose} />
+      {src ? <video src={src} controls autoPlay className="h-full w-full object-contain" /> : <p className="grid h-full place-items-center">Este proyecto todavía no tiene video.</p>}
+    </section>
+  );
+}
+
+export function ContactStage({
+  project,
+  organization,
+  onWhatsapp,
+  onClose,
+}: {
+  project: ShowroomData["project"];
+  organization: ShowroomData["organization"];
+  onWhatsapp: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <section className="full-stage overflow-auto bg-white text-[#1c1915]">
+      <div className="mx-auto max-w-lg px-6 py-8">
+        <button type="button" className="round" onClick={onClose} aria-label="Cerrar">×</button>
+        <h2 className="mt-6 text-3xl">{project.nombre}</h2>
+        <p className="mt-3 text-sm leading-6">{project.descripcion}</p>
+        <p className="mt-3 text-sm">{project.direccion}</p>
+        <p className="mt-6 text-xl">{organization.nombre}</p>
+        <p className="text-sm text-[#6b6258]">{organization.descripcion}</p>
+        <p className="mt-4">{project.contacto.telefono}</p>
+        <p>{project.contacto.email}</p>
+        <button type="button" className="enter-btn mt-6" onClick={onWhatsapp}>WhatsApp</button>
+      </div>
+    </section>
+  );
+}
+
+function StageBar({ title, onClose }: { title: string; onClose: () => void }) {
+  return (
+    <div className="absolute left-4 top-4 z-10 flex items-center gap-2">
+      <button type="button" className="round" onClick={onClose} aria-label="Cerrar">×</button>
+      <span className="rounded-full bg-black/45 px-3 py-1 text-sm">{title}</span>
+    </div>
+  );
+}
+
+function Arrows({ index, total, onChange }: { index: number; total: number; onChange: (index: number) => void }) {
+  if (total < 2) return null;
+  return (
+    <>
+      <button type="button" aria-label="Anterior" className="round absolute left-4 top-1/2 z-10 -translate-y-1/2" onClick={() => onChange((index - 1 + total) % total)}>‹</button>
+      <button type="button" aria-label="Siguiente" className="round absolute right-4 top-1/2 z-10 -translate-y-1/2" onClick={() => onChange((index + 1) % total)}>›</button>
+    </>
+  );
+}
+
+function Panorama({ tour }: { tour: Tour }) {
+  const [help, setHelp] = useState(true);
+  const kind = tourEmbed(tour.proveedor, tour.url);
+  if (kind === "iframe") {
+    return (
+      <div className="relative h-full w-full" onPointerDown={() => setHelp(false)}>
+        <iframe title={tour.titulo} src={tour.url} className="h-full w-full border-0" allow="fullscreen; xr-spatial-tracking" />
+        {help && <HelpOverlay />}
+      </div>
+    );
+  }
+  return <Equirect url={tour.url} title={tour.titulo} onInteract={() => setHelp(false)} help={help} />;
+}
+
+function Equirect({ url, title, help, onInteract }: { url: string; title: string; help: boolean; onInteract: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const view = useRef({ yaw: 0.2, pitch: 0, fov: 1.15 });
+  const drag = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
+  const interact = useRef(onInteract);
+  interact.current = onInteract;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const gl = canvas.getContext("webgl", { preserveDrawingBuffer: true, alpha: false });
+    if (!gl) return;
+    const compile = (type: number, source: string) => {
+      const shader = gl.createShader(type);
+      if (!shader) return null;
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      return shader;
+    };
+    const program = gl.createProgram();
+    if (!program) return;
+    const vertex = compile(gl.VERTEX_SHADER, "attribute vec2 p; varying vec2 v; void main(){ v=p; gl_Position=vec4(p,0.0,1.0); }");
+    const fragment = compile(gl.FRAGMENT_SHADER, `
+      precision mediump float;
+      varying vec2 v;
+      uniform sampler2D tex;
+      uniform float yaw, pitch, fov, aspect;
+      const float PI = 3.14159265;
+      vec3 rotY(vec3 p, float a){ float c=cos(a), s=sin(a); return vec3(c*p.x+s*p.z, p.y, -s*p.x+c*p.z); }
+      vec3 rotX(vec3 p, float a){ float c=cos(a), s=sin(a); return vec3(p.x, c*p.y-s*p.z, s*p.y+c*p.z); }
+      void main(){
+        vec3 dir = normalize(vec3(v.x*aspect*tan(fov*0.5), v.y*tan(fov*0.5), -1.0));
+        dir = rotX(dir, pitch);
+        dir = rotY(dir, yaw);
+        float lon = atan(dir.x, -dir.z);
+        float lat = asin(clamp(dir.y, -1.0, 1.0));
+        gl_FragColor = texture2D(tex, vec2(lon/(2.0*PI)+0.5, 0.5-lat/PI));
+      }
+    `);
+    if (!vertex || !fragment) return;
+    gl.attachShader(program, vertex);
+    gl.attachShader(program, fragment);
+    gl.linkProgram(program);
+    gl.useProgram(program);
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(program, "p");
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    let alive = true;
+    const draw = () => {
+      if (!alive || !image.complete || !image.naturalWidth) return;
+      const width = canvas.clientWidth || 640;
+      const height = canvas.clientHeight || 360;
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.uniform1f(gl.getUniformLocation(program, "yaw"), view.current.yaw);
+      gl.uniform1f(gl.getUniformLocation(program, "pitch"), view.current.pitch);
+      gl.uniform1f(gl.getUniformLocation(program, "fov"), view.current.fov);
+      gl.uniform1f(gl.getUniformLocation(program, "aspect"), canvas.width / Math.max(1, canvas.height));
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    };
+    image.onload = () => {
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      draw();
+    };
+    image.src = url;
+    const onResize = () => draw();
+    window.addEventListener("resize", onResize);
+    const node = canvas;
+    const onDown = (event: PointerEvent) => {
+      interact.current();
+      drag.current = { x: event.clientX, y: event.clientY, yaw: view.current.yaw, pitch: view.current.pitch };
+    };
+    const onMove = (event: PointerEvent) => {
+      if (!drag.current) return;
+      view.current.yaw = drag.current.yaw - (event.clientX - drag.current.x) * 0.005;
+      view.current.pitch = Math.max(-1.1, Math.min(1.1, drag.current.pitch + (event.clientY - drag.current.y) * 0.004));
+      draw();
+    };
+    const onUp = () => { drag.current = null; };
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      view.current.fov = Math.max(0.5, Math.min(1.8, view.current.fov + (event.deltaY > 0 ? 0.06 : -0.06)));
+      draw();
+    };
+    node.addEventListener("pointerdown", onDown);
+    node.addEventListener("pointermove", onMove);
+    node.addEventListener("pointerup", onUp);
+    node.addEventListener("pointerleave", onUp);
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      alive = false;
+      window.removeEventListener("resize", onResize);
+      node.removeEventListener("pointerdown", onDown);
+      node.removeEventListener("pointermove", onMove);
+      node.removeEventListener("pointerup", onUp);
+      node.removeEventListener("pointerleave", onUp);
+      node.removeEventListener("wheel", onWheel);
+    };
+  }, [url]);
+
+  return (
+    <div className="relative h-full w-full">
+      <canvas ref={canvasRef} aria-label={title} className="h-full w-full cursor-grab" />
+      {help && <HelpOverlay />}
+    </div>
+  );
+}
+
+function HelpOverlay() {
+  return (
+    <div className="tour-help">
+      <span>SEÑALAR<br />Y MOVER</span>
+      <span>GIRAR<br />LA VISTA</span>
+      <span>CAMBIAR<br />EL ZOOM</span>
+      <span>PASO<br />CORTO</span>
+    </div>
+  );
+}
+
+function ready(unit: Unit, tab: Tab, planta: string | null) {
+  if (tab === "galeria") return unit.galeria.length > 0;
+  if (tab === "vistas") return Boolean(unit.vista_url);
+  if (tab === "planta3d") return Boolean(unit.planta3d);
+  if (tab === "planos") return Boolean(unit.plano || planta);
+  if (tab === "recorrido") return Boolean(unit.tour);
+  return unit.videos.length > 0;
+}
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "galeria", label: "Galería" },
+  { id: "vistas", label: "Vistas" },
+  { id: "planta3d", label: "Planta 3D" },
+  { id: "planos", label: "Planos" },
+  { id: "recorrido", label: "Recorrido" },
+  { id: "video", label: "Video" },
+];
+
+function moneyLabel(value: number, moneda: "USD" | "ARS") {
+  if (moneda === "USD") return formatUsd(value);
+  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(value);
+}
+
+export function UnitSheet({
+  unit,
+  tab,
+  setTab,
+  project,
+  plans,
+  plantaImagen,
+  footprint,
+  vistaPoints = null,
+  vistaSrc = null,
+  sent,
+  sending,
+  error,
+  photo,
+  setPhoto,
+  onClose,
+  onChangeFloor,
+  onLocate,
+  onWhatsapp,
+  onLead,
+}: {
+  unit: Unit;
+  tab: Tab;
+  setTab: (tab: Tab) => void;
+  project: ShowroomData["project"];
+  plans: ShowroomData["plans"];
+  fallback: string;
+  plantaImagen: string | null;
+  footprint: [number, number][] | null;
+  vistaPoints?: [number, number][] | null;
+  vistaSrc?: string | null;
+  sent: boolean;
+  sending: boolean;
+  error: string;
+  photo: number;
+  setPhoto: (index: number) => void;
+  onClose: () => void;
+  onChangeFloor: () => void;
+  onLocate?: () => void;
+  onWhatsapp: () => void;
+  onShare: () => void;
+  onLead: (form: FormData) => void;
+}) {
+  const ficha = project.ficha;
+  const [ask, setAsk] = useState(false);
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [planId, setPlanId] = useState(plans[0]?.id ?? "");
+  const [buyer, setBuyer] = useState("");
+  const [mail, setMail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  useEffect(() => {
+    setPlanId(plans[0]?.id ?? "");
+    setNote("");
+    setAsk(false);
+    setQuoteOpen(false);
+  }, [unit.id, plans]);
+  useEffect(() => {
+    if (ready(unit, tab, plantaImagen)) return;
+    const next = TABS.find((item) => ready(unit, item.id, plantaImagen));
+    if (next && next.id !== tab) setTab(next.id);
+  }, [unit, tab, plantaImagen, setTab]);
+  const plan = plans.find((item) => item.id === planId) ?? plans[0];
+  const available = unit.estado === "disponible";
+  const showPrice = available && ficha.precio && unit.mostrar_precio && unit.precio != null;
+  const shown = showPrice && plan ? showQuote(unit.precio as number, plan, project.usdArs, project.cac) : null;
+  const tone = statusTone(unit.estado);
+  const vistaFallback = unit.vista_propia === false;
+  const blocked = unit.estado === "vendida" || unit.estado === "reservada" || unit.estado === "pausa" || unit.estado === "bloqueada";
+  const balcon = unit.m2_totales != null && unit.m2_cubiertos != null ? Math.max(0, unit.m2_totales - unit.m2_cubiertos) : null;
+  const gallery = unit.galeria.length ? unit.galeria : unit.renders.filter((url) => url !== unit.planta3d);
+  const currentPhoto = gallery[photo] ?? gallery[0];
+
+  async function downloadQuote() {
+    if (!plan) return;
+    if (!buyer.trim()) { setNote("Escribí un nombre para la cotización."); return; }
+    setBusy(true);
+    setNote("");
+    const response = await fetch("/api/public/cotizacion", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slug: project.slug, codigo: unit.codigo, planId: plan.id, nombre: buyer, email: mail }),
+    });
+    setBusy(false);
+    if (!response.ok) {
+      const json = await response.json().catch(() => ({}));
+      setNote(typeof json.error === "string" ? json.error : "No pudimos armar la cotización.");
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `cotizacion-${unit.codigo}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setNote("Descargamos el PDF.");
+  }
+
+  return (
+    <section className="unit-sheet" data-testid="unit-panel">
+      <aside className="unit-side">
+        <div className="sheet-hero relative">
+          {unit.planta3d && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={unit.planta3d} alt={`Planta 3D de ${unit.codigo}`} className="hero-plan" />
+          )}
+          <button type="button" aria-label="Cerrar ficha" className="round sheet-close" onClick={onClose}>×</button>
+        </div>
+        <div className="body">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h2 className="text-3xl font-semibold">{unit.codigo}</h2>
+              {unit.tipologia && <p className="text-sm text-[#8a8178]">Modelo {unit.tipologia}</p>}
+            </div>
+            <p className="status-chip" style={{ color: tone.color, background: tone.bg }}><i style={{ background: tone.color }} />{tone.label.toUpperCase()}</p>
+          </div>
+          {blocked && <p className="mt-2 text-sm text-[#8a8178]">Esta unidad no está disponible</p>}
+          <button type="button" className="enter-btn mt-3" onClick={() => setAsk(true)}>{blocked ? "Solicitar información" : showPrice ? formatUsd(unit.precio as number) : "Consultar precio"}</button>
+          <div className="tab-row mt-4">
+            {TABS.filter((item) => ready(unit, item.id, plantaImagen)).map((item) => {
+              const label = item.id === "vistas" && vistaFallback ? "Ubicación" : item.label;
+              return (
+                <button key={item.id} type="button" className={tab === item.id ? "icon-tab on" : "icon-tab"} onClick={() => setTab(item.id)} aria-label={label}>
+                  <span className="bubble"><TabGlyph name={item.id} /></span>
+                  <span className="cap">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-4 text-xs uppercase tracking-[0.14em] text-[#8a8178]">Características</p>
+          <div className="mt-1">
+            {unit.m2_totales != null && <p className="spec">▦ Área total {formatM2(unit.m2_totales)} m²</p>}
+            {unit.m2_cubiertos != null && <p className="spec">▢ Cubierta {formatM2(unit.m2_cubiertos)} m²</p>}
+            {balcon != null && balcon > 0 && <p className="spec">▤ Balcón {formatM2(balcon)} m²</p>}
+            {unit.dormitorios != null && <p className="spec">⌂ {unit.dormitorios} dormitorios</p>}
+            {unit.banos != null && <p className="spec">◈ {unit.banos} baños</p>}
+            {unit.orientacion && <p className="spec">◎ Orientación {unit.orientacion}</p>}
+            {unit.piso && <p className="spec">☰ {unit.piso}</p>}
+            {showPrice && <p className="spec">{formatUsd(unit.precio as number)}</p>}
+            {unit.custom.map((field) => (
+              <p key={field.clave} className="spec">{field.nombre}: {typeof field.value === "boolean" ? (field.value ? "sí" : "no") : typeof field.value === "number" ? `${formatNumber(field.value)}${field.unidad ? ` ${field.unidad}` : ""}` : String(field.value)}</p>
+            ))}
+          </div>
+          {plantaImagen && (
+            <button type="button" className="loc-thumb" onClick={() => setTab("planos")}>
+              <FloorHighlight src={plantaImagen} points={footprint} codigo={unit.codigo} compact />
+              <span className="block px-2 py-1 text-center text-[10px] text-[#6b6258]">Ubicación en planta</span>
+            </button>
+          )}
+          {ask && !sent && (
+            <form className="mt-3 space-y-2" onSubmit={(event) => { event.preventDefault(); onLead(new FormData(event.currentTarget)); }}>
+              <input name="nombre" required placeholder="Nombre" className="field" />
+              <input name="email" type="email" placeholder="Email" className="field" />
+              <input name="telefono" placeholder="Teléfono" className="field" />
+              <textarea name="mensaje" rows={2} placeholder={`Hola, quiero saber más de ${unit.codigo}`} className="field" />
+              {error && <p className="text-sm text-[#b42318]">{error}</p>}
+              <button disabled={sending} className="enter-btn">{sending ? "Enviando…" : "Enviar"}</button>
+            </form>
+          )}
+          {sent && <p className="mt-3 text-sm text-[#1f6b4a]">Recibimos tu consulta por {unit.codigo}.</p>}
+          {quoteOpen && shown && plan && (
+            <div className="mt-3 space-y-2" data-testid="cotizador">
+              <label className="block text-sm">Esquema de pago
+                <select value={plan.id} onChange={(event) => setPlanId(event.target.value)} className="field mt-1">
+                  {plans.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
+                </select>
+              </label>
+              <div className="quote-grid text-sm">
+                <div><p className="text-[#6b6258]">Anticipo</p><p>{moneyLabel(shown.anticipo, shown.moneda)}</p></div>
+                <div><p className="text-[#6b6258]">{plan.cuotas} cuotas</p><p>{moneyLabel(shown.cuota, shown.moneda)}</p></div>
+                <div><p className="text-[#6b6258]">Última cuota</p><p>{moneyLabel(shown.ultima, shown.moneda)}</p></div>
+                <div><p className="text-[#6b6258]">Saldo a posesión</p><p>{moneyLabel(shown.saldo, shown.moneda)}</p></div>
+              </div>
+              <input value={buyer} onChange={(event) => setBuyer(event.target.value)} placeholder="Nombre" className="field" />
+              <input value={mail} onChange={(event) => setMail(event.target.value)} type="email" placeholder="Email" className="field" />
+              <button type="button" disabled={busy} className="enter-btn" onClick={() => void downloadQuote()}>{busy ? "Armando…" : "Descargar PDF"}</button>
+              {note && <p className="text-xs text-[#6b6258]">{note}</p>}
+            </div>
+          )}
+        </div>
+        <div className="dock">
+          <button type="button" className="enter-btn" onClick={() => setAsk((open) => !open)}>Solicitar información</button>
+          <div className="dock-row">
+            <a className="round light" href={`mailto:${project.contacto.email}`} aria-label="Email"><MailIcon /></a>
+            <a className="round light" href={`tel:${project.contacto.telefono}`} aria-label="Teléfono"><PhoneIcon /></a>
+            {ficha.whatsapp && <button type="button" className="round light" onClick={onWhatsapp} aria-label="WhatsApp"><WhatsIcon /></button>}
+            {shown && <button type="button" className="outline-pill" onClick={() => setQuoteOpen((open) => !open)}>Cotizar</button>}
+            {available && ficha.pdf && <a className="outline-pill" href={`/api/public/ficha?slug=${project.slug}&codigo=${encodeURIComponent(unit.codigo)}`} target="_blank" rel="noreferrer">PDF</a>}
+          </div>
+        </div>
+      </aside>
+      <div className="unit-main">
+        {tab === "galeria" && currentPhoto && (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={currentPhoto} alt="" className="fit" />
+            {illustrativeInterior(currentPhoto, unit.codigo) && <p className="vista-caption ilustrativa">Imagen ilustrativa</p>}
+            <Arrows index={photo} total={gallery.length} onChange={setPhoto} />
+          </>
+        )}
+        {tab === "vistas" && (vistaSrc || unit.vista_url) && (
+          <PlacedPhoto
+            src={vistaSrc || unit.vista_url || ""}
+            alt={vistaFallback ? "Ubicación en el edificio" : unit.orientacion ? `Vista al ${unit.orientacion}` : "Vista"}
+            points={vistaPoints}
+            color={tone.color}
+            marker={vistaFallback ? unit.codigo : null}
+            caption={vistaFallback ? "Ubicación en el edificio" : null}
+          />
+        )}
+        {tab === "planta3d" && unit.planta3d && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={unit.planta3d} alt={`Planta 3D de ${unit.codigo}`} className="fit" />
+        )}
+        {tab === "planos" && (
+          unit.plano ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={unit.plano} alt={`Plano de ${unit.codigo}`} className="fit" />
+          ) : plantaImagen ? (
+            <FloorHighlight src={plantaImagen} points={footprint} codigo={unit.codigo} />
+          ) : (
+            <p className="grid h-full place-items-center text-[#6b6258]">Esta unidad no tiene un plano cargado.</p>
+          )
+        )}
+        {tab === "recorrido" && unit.tour && <Panorama tour={unit.tour} />}
+        {tab === "video" && unit.videos[0] && <video src={unit.videos[0]} controls className="fit" />}
+        <button type="button" className="pill absolute left-4 top-4" onClick={onChangeFloor}>Cambiar planta</button>
+        <div className="stage-switch">
+          {TABS.filter((item) => ready(unit, item.id, plantaImagen)).map((item) => {
+            const label = item.id === "vistas" && vistaFallback ? "Ubicación" : item.label;
+            const on = tab === item.id;
+            return (
+              <button key={item.id} type="button" className={on ? "on" : ""} onClick={() => setTab(item.id)} aria-label={label}>
+                <TabGlyph name={item.id} />
+                {on && <span>{label}</span>}
+              </button>
+            );
+          })}
+        </div>
+        {plantaImagen && (
+          <button type="button" className="stage-minimap" onClick={() => onLocate?.()} aria-label="Ubicación en planta">
+            <FloorHighlight src={plantaImagen} points={footprint} codigo={unit.codigo} compact />
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PlacedPhoto({ src, alt, points, color, caption, marker }: { src: string; alt: string; points: [number, number][] | null; color: string; caption: string | null; marker?: string | null }) {
+  const frame = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  const [natural, setNatural] = useState({ w: 16, h: 9 });
+  useEffect(() => {
+    const node = frame.current;
+    if (!node) return;
+    const observer = new ResizeObserver(() => setBox({ w: node.clientWidth, h: node.clientHeight }));
+    observer.observe(node);
+    setBox({ w: node.clientWidth, h: node.clientHeight });
+    return () => observer.disconnect();
+  }, []);
+  const scale = box.w > 0 && box.h > 0 ? Math.min(box.w / natural.w, box.h / natural.h) : 0;
+  const width = natural.w * scale;
+  const height = natural.h * scale;
+  const left = (box.w - width) / 2;
+  const top = (box.h - height) / 2;
+  const mark = points && points.length >= 3 ? points : null;
+  const cx = mark ? mark.reduce((sum, point) => sum + point[0], 0) / mark.length : 0;
+  const cy = mark ? mark.reduce((sum, point) => sum + point[1], 0) / mark.length : 0;
+  return (
+    <div ref={frame} className="vista-frame">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        className="absolute"
+        draggable={false}
+        style={{ left, top, width: width || undefined, height: height || undefined, objectFit: "fill" }}
+        onLoad={(event) => {
+          const img = event.currentTarget;
+          if (img.naturalWidth) setNatural({ w: img.naturalWidth, h: img.naturalHeight });
+        }}
+      />
+      {mark && width > 0 && (
+        <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="absolute" style={{ left, top, width, height }}>
+          <polygon points={mark.map((point) => point.join(",")).join(" ")} fill={color} fillOpacity="0.55" stroke="#fff" strokeWidth="0.004" />
+          {marker ? (
+            <>
+              <line x1={cx} y1={Math.max(0.012, cy - 0.045)} x2={cx} y2={cy} stroke="#fff" strokeWidth="0.003" />
+              <circle cx={cx} cy={Math.max(0.012, cy - 0.045)} r="0.006" fill="#fff" stroke={color} strokeWidth="0.002" />
+              <text x={cx} y={Math.max(0.01, cy - 0.058)} textAnchor="middle" fill="#fff" fontSize="0.018" fontWeight="700">{marker}</text>
+            </>
+          ) : (
+            <circle cx={cx} cy={cy} r="0.006" fill="#fff" stroke={color} strokeWidth="0.002" />
+          )}
+        </svg>
+      )}
+      {caption && <p className="vista-caption">{caption}</p>}
+    </div>
+  );
+}
+
+function FloorHighlight({ src, points, codigo, compact = false }: { src: string; points: [number, number][] | null; codigo: string; compact?: boolean }) {
+  return (
+    <div className={compact ? "loc-map" : "relative h-full w-full"}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={compact ? "" : `Planta con ${codigo}`} className={compact ? "h-full w-full object-fill" : "fit"} />
+      {points && (
+        <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
+          <polygon points={points.map((point) => point.join(",")).join(" ")} fill="#c4a574" fillOpacity={compact ? 0.85 : 0.35} stroke="none" />
+        </svg>
+      )}
+    </div>
+  );
+}
+
+function MailIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <path fill="none" stroke="currentColor" strokeWidth="1.4" d="M2 3.5h12v9H2z" />
+      <path fill="none" stroke="currentColor" strokeWidth="1.4" d="M2 4.5l6 4 6-4" />
+    </svg>
+  );
+}
+
+function PhoneIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <path fill="none" stroke="currentColor" strokeWidth="1.4" d="M5.2 2.5h2L8 5.2 6.6 6.4a8 8 0 0 0 3 3L11 8.2l2.6.8v2a1.2 1.2 0 0 1-1.3 1.2A10.5 10.5 0 0 1 3.8 4.8 1.2 1.2 0 0 1 5.2 2.5z" />
+    </svg>
+  );
+}
+
+function WhatsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <path fill="currentColor" d="M8 1.6a6.3 6.3 0 0 0-5.4 9.5L1.6 14.4l3.4-1a6.3 6.3 0 1 0 3-11.8zm3.4 8.9c-.1.4-.7.7-1 .8-.3 0-.6.1-2-.5-1.6-.7-2.7-2.3-2.8-2.4-.1-.1-.8-1-.8-1.9s.5-1.4.7-1.5h.5c.1 0 .3 0 .4.3.2.4.6 1.4.6 1.5.1.1 0 .2 0 .3-.1.1-.1.2-.2.3l-.3.3c-.1.1-.2.2-.1.4.1.2.6 1 1.3 1.6.9.8 1.6 1 1.8 1.1.2.1.3 0 .4-.1l.5-.6c.1-.2.3-.1.4-.1h.5c.2 0 .4.1.5.3.1.3.4 1.1.3 1.3z" />
+    </svg>
+  );
+}
+
+function TabGlyph({ name }: { name: Tab }) {
+  const common = { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.3 };
+  if (name === "galeria") return <svg {...common}><rect x="2" y="3" width="12" height="10" rx="1" /><path d="M2 10l3-3 2 2 3-4 4 5" /></svg>;
+  if (name === "vistas") return <svg {...common}><circle cx="8" cy="8" r="2" /><path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" /></svg>;
+  if (name === "planta3d") return <svg {...common}><path d="M8 2l5 3v6l-5 3-5-3V5z" /></svg>;
+  if (name === "planos") return <svg {...common}><rect x="3" y="2.5" width="10" height="11" /><path d="M3 6h10M7 6v7.5" /></svg>;
+  if (name === "recorrido") return <svg {...common}><circle cx="8" cy="8" r="5" /><path d="M8 5.5v3l2 1" /></svg>;
+  return <svg {...common}><circle cx="8" cy="8" r="5" /><path d="M7 6.2v3.6l3-1.8z" fill="currentColor" stroke="none" /></svg>;
+}

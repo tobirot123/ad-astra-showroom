@@ -1,0 +1,21 @@
+{
+  "nota": "Reemplazá el archivo manteniendo el nombre y la proporción. El showroom lo toma solo. También podés subir el render en Medios y elegirlo en Recorrido.",
+  "archivos": [
+    "fachada.webp",
+    "fachada-b.webp",
+    "plano-piso.webp",
+    "plano-piso-b.webp",
+    "plano-2amb.webp",
+    "plano-3amb.webp",
+    "render-living.webp",
+    "render-cocina.webp",
+    "portada.webp",
+    "aereo.webp",
+    "barrio.webp",
+    "masterplan.webp",
+    "panorama.webp",
+    "vista-altura.webp",
+    "vuelo-intro.mp4",
+    "brochure.pdf"
+  ]
+}

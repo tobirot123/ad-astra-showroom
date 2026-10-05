@@ -33,7 +33,7 @@ export function MediaScreen() {
   return (
     <div>
       <h1 className="font-serif text-4xl">Medios</h1>
-      <p className="mt-1 text-sm text-[#6b6258]">Las fotos se convierten a WebP en 480, 960 y 1600 px. Los videos se guardan como vinieron.</p>
+      <p className="mt-1 text-sm text-[#6b6258]">Las fotos se convierten a WebP en 480, 960 y 1600 px. Los videos se guardan como vinieron. El recorte cenital se elige por piso y reemplaza la planta compuesta en el showroom: encuadrá la losa como el plano de ese piso.</p>
       {admin && (
         <form
           className="mt-4 grid gap-3 rounded-3xl border border-[#e4d9c8] bg-white p-4 md:grid-cols-2"
@@ -59,6 +59,15 @@ export function MediaScreen() {
               <option value="plano">Plano</option>
               <option value="fachada">Fachada</option>
               <option value="portada">Portada</option>
+              <option value="vista">Vista</option>
+              <option value="corte">Recorte cenital del piso</option>
+            </select>
+          </label>
+          <label className="text-sm">
+            Piso (recorte cenital)
+            <select name="floorId" className="mt-1 w-full rounded-xl border border-[#e4d9c8] px-3 py-2">
+              <option value="">Sin piso</option>
+              {data.floors.map((floor) => <option key={floor.id} value={floor.id}>{floor.nombre}</option>)}
             </select>
           </label>
           <label className="text-sm">

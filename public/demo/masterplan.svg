@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800">
-  <rect width="1200" height="800" fill="#e4efe2"/>
-  <rect x="40" y="40" width="1120" height="720" fill="#d5e4d2" stroke="#8eaa86"/>
-  <g fill="#f4efe6" stroke="#8d7b62" stroke-width="4">
-    <rect x="100" y="130" width="280" height="220"/>
-    <rect x="460" y="130" width="280" height="220"/>
-    <rect x="820" y="130" width="280" height="220"/>
-    <rect x="100" y="450" width="280" height="220"/>
-    <rect x="460" y="450" width="280" height="220"/>
-    <rect x="820" y="450" width="280" height="220"/>
-  </g>
-  <text x="600" y="80" text-anchor="middle" font-family="Georgia, serif" font-size="28" fill="#1c1915">Loteo del parque</text>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+    <rect width="1200" height="800" fill="#e4efe2"/>
+    <rect x="36" y="36" width="1128" height="728" fill="#d7e6d4" stroke="#8eaa86"/>
+    <g fill="#f7f3ec" stroke="#8d7358" stroke-width="4">
+      <rect x="90" y="140" width="280" height="210"/>
+      <rect x="450" y="140" width="280" height="210"/>
+      <rect x="810" y="140" width="280" height="210"/>
+      <rect x="90" y="450" width="280" height="210"/>
+      <rect x="450" y="450" width="280" height="210"/>
+      <rect x="810" y="450" width="280" height="210"/>
+    </g>
+    <text x="600" y="90" text-anchor="middle" font-family="Georgia, serif" font-size="28" fill="#1c1915">Loteo del parque</text>
+  </svg>

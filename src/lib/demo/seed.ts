@@ -1,4 +1,6 @@
 import { appendShowcase } from "@/lib/demo/seed-m2";
+import { appendCommercial } from "@/lib/demo/seed-m3";
+import { applyPol } from "@/lib/demo/seed-pol";
 import { COLUMNS, FLOOR_BANDS, unitPolygon } from "@/lib/demo/geometry";
 import { seedId } from "@/lib/domain/ids";
 import type {
@@ -186,6 +188,19 @@ export function buildSeed(now = new Date()): Database {
           lead_required_for_request: true,
           escalate_to_superadmin: false,
           approver_user_ids: [],
+          usd_ars: 1450,
+          cac_factor: 1.08,
+          texto_legal: "Precios orientativos en dólares. Las imágenes son ilustrativas y pueden diferir de la obra.",
+          aviso_cookies: "Usamos cookies para medir visitas y, si aceptás, para remarketing.",
+          pasos: ["Reservá con seña", "Firmá el boleto", "Pagá las cuotas", "Escriturá en la posesión"],
+          brochure_url: "/demo/brochure.pdf",
+          color_acento: "#c4a574",
+          titulo_publico: "ALBA",
+          ga4_id: "",
+          gtm_id: "",
+          pixel_id: "",
+          remarketing: false,
+          ficha: { precio: true, whatsapp: true, compartir: true, pdf: true, ambientes: true },
         },
         locale: "es",
         idiomas: ["es"],
@@ -348,11 +363,11 @@ export function buildSeed(now = new Date()): Database {
       },
     ],
     media: [
-      media(400, "fachada.svg", "fachada", "/demo/fachada.svg", "Fachada Torre A"),
-      media(401, "plano-2amb.svg", "planos", "/demo/plano-2amb.svg", "Plano 2 ambientes"),
-      media(402, "plano-3amb.svg", "planos", "/demo/plano-3amb.svg", "Plano 3 ambientes"),
-      media(403, "render-living.svg", "renders", "/demo/render-living.svg", "Living"),
-      media(404, "render-cocina.svg", "renders", "/demo/render-cocina.svg", "Cocina"),
+      media(400, "fachada.webp", "fachada", "/demo/fachada.webp", "Fachada Torre A"),
+      media(401, "plano-2amb.webp", "planos", "/demo/plano-2amb.webp", "Plano 2 ambientes"),
+      media(402, "plano-3amb.webp", "planos", "/demo/plano-3amb.webp", "Plano 3 ambientes"),
+      media(403, "render-living.webp", "renders", "/demo/render-living.webp", "Living"),
+      media(404, "render-cocina.webp", "renders", "/demo/render-cocina.webp", "Cocina"),
     ],
     galleries: [],
     tours: [],
@@ -362,6 +377,9 @@ export function buildSeed(now = new Date()): Database {
     broker_projects: [],
     quotations: [],
     viewpoints: [],
+    construction_updates: [],
+    custom_sections: [],
+    improvement_requests: [],
     media_links: [
       { id: seedId(410), media_id: seedId(400), entidad: "project", entidad_id: PROJECT, rol: "fachada", orden: 0 },
       { id: seedId(411), media_id: seedId(401), entidad: "typology", entidad_id: TYP_2, rol: "plano", orden: 0 },
@@ -422,6 +440,8 @@ export function buildSeed(now = new Date()): Database {
   };
 
   appendShowcase(db, iso);
+  appendCommercial(db);
+  applyPol(db, now);
   return db;
 }
 
