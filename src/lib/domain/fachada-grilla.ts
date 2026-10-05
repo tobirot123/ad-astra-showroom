@@ -42,15 +42,51 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
-/** Bloque de estado dentro del vano, en el mismo lugar relativo de cada piso para que formen una columna. */
+/** ~10×17 px cuando la fachada de 1920×1080 cubre un viewport de 1440×900. */
+const MARKER_W = 0.0064;
+const MARKER_H = 0.0189;
+
+function round4(value: number) {
+  return Number(value.toFixed(4));
+}
+
+export function rectAt(cx: number, cy: number): Point[] {
+  const w = MARKER_W / 2;
+  const h = MARKER_H / 2;
+  return [
+    [round4(cx - w), round4(cy - h)],
+    [round4(cx + w), round4(cy - h)],
+    [round4(cx + w), round4(cy + h)],
+    [round4(cx - w), round4(cy + h)],
+  ];
+}
+
+/** Bloque de estado, del mismo tamaño, centrado en el vano. */
 export function markerQuad(points: Point[]): Point[] {
   if (points.length < 4) return points;
-  const quad: Quad = [points[0]!, points[1]!, points[2]!, points[3]!];
-  const width = Math.hypot(quad[1][0] - quad[0][0], quad[1][1] - quad[0][1]);
-  const narrow = width < 0.045;
-  const u0 = narrow ? 0.04 : 0.08;
-  const u1 = narrow ? 0.2 : 0.135;
-  return [onQuad(quad, u0, 0.16), onQuad(quad, u1, 0.16), onQuad(quad, u1, 0.84), onQuad(quad, u0, 0.84)];
+  const cx = (points[0]![0] + points[1]![0] + points[2]![0] + points[3]![0]) / 4;
+  const cy = (points[0]![1] + points[1]![1] + points[2]![1] + points[3]![1]) / 4;
+  return rectAt(cx, cy);
+}
+
+/** Misma x para cada unidad de una columna, y la y del piso. */
+export function stackMarkers(entries: { id: string; stack: string; points: Point[] }[]): Map<string, Point[]> {
+  const groups = new Map<string, { id: string; cx: number; cy: number }[]>();
+  for (const entry of entries) {
+    if (entry.points.length < 4) continue;
+    const cx = entry.points.reduce((sum, point) => sum + point[0], 0) / entry.points.length;
+    const cy = entry.points.reduce((sum, point) => sum + point[1], 0) / entry.points.length;
+    const list = groups.get(entry.stack) ?? [];
+    list.push({ id: entry.id, cx, cy });
+    groups.set(entry.stack, list);
+  }
+  const out = new Map<string, Point[]>();
+  for (const list of groups.values()) {
+    const xs = list.map((item) => item.cx).sort((a, b) => a - b);
+    const x = xs[Math.floor(xs.length / 2)] ?? 0;
+    for (const item of list) out.set(item.id, rectAt(x, item.cy));
+  }
+  return out;
 }
 
 /** Punto del plano de la fachada. v constante es una losa; u constante es un montante. */

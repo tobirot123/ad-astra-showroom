@@ -16,6 +16,20 @@ export function UnitsScreen() {
   const [csv, setCsv] = useState("");
   const [preview, setPreview] = useState<string>("");
   const [requestUnit, setRequestUnit] = useState<string | null>(null);
+  const planM2 = useMemo(() => {
+    const areas = new Map<string, number>();
+    for (const overlay of data?.overlays ?? []) {
+      if (overlay.contenedor !== "floor" || overlay.vinculo_tipo !== "unit" || !overlay.vinculo_id || overlay.puntos.length < 3) continue;
+      let area = 0;
+      for (let index = 0; index < overlay.puntos.length; index++) {
+        const [x1, y1] = overlay.puntos[index]!;
+        const [x2, y2] = overlay.puntos[(index + 1) % overlay.puntos.length]!;
+        area += x1 * y2 - x2 * y1;
+      }
+      areas.set(overlay.vinculo_id, (Math.abs(area) / 2) * 1920 * 1080 / 495.6584659913169);
+    }
+    return areas;
+  }, [data?.overlays]);
   const rows = useMemo(() => {
     if (!data?.project) return [];
     return data.units.filter((unit) => {
@@ -118,6 +132,9 @@ export function UnitsScreen() {
                 <td className="py-2 font-medium">
                   {unit.codigo}
                   {unit.pending_label && <span className="mt-1 block text-xs text-[#9a6240]">{unit.pending_label}</span>}
+                  {planM2.get(unit.id) != null && unit.m2_cubiertos != null && unit.m2_cubiertos > 0 && (Math.abs(planM2.get(unit.id)! - unit.m2_cubiertos) > 8 || Math.abs(planM2.get(unit.id)! - unit.m2_cubiertos) / unit.m2_cubiertos > 0.12) && (
+                    <span className="mt-1 block text-xs text-[#9a6240]">m² informado vs plano · {formatM2(unit.m2_cubiertos)} vs {formatM2(planM2.get(unit.id)!)}</span>
+                  )}
                   {seller && (
                     <button className="mt-1 block text-xs underline" onClick={() => setRequestUnit(unit.id)}>Solicitar</button>
                   )}

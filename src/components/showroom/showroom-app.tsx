@@ -13,7 +13,7 @@ import "./showroom.css";
 import { coverFrame, portraitCenter } from "@/lib/domain/cover-frame";
 import { interiorPoint } from "@/lib/domain/polygon";
 import { AmenityStage, ContactStage, FullIcon, GalleryStage, HoverCard, MapStage, PhMenu, QrIcon, RecorridoStage, UnitSheet, VideoStage } from "@/components/showroom/ph-panels";
-import { markerQuad } from "@/lib/domain/fachada-grilla";
+import { stackMarkers } from "@/lib/domain/fachada-grilla";
 import { entryFloor, facadeMatch, sceneKey, sortUnits, tourEmbed, unitMatches, videosToLoad, type FlowFilters } from "@/lib/domain/showroom-flow";
 import type { ShowroomData } from "@/lib/services/present";
 
@@ -100,22 +100,24 @@ function insetRing(points: [number, number][], amount: number): [number, number]
   return points.map(([x, y]) => [x + (cx - x) * amount, y + (cy - y) * amount]);
 }
 
-function slabFrame(boxW: number, boxH: number, imgW: number, imgH: number, drop: number) {
-  const scale = Math.min((boxW * 0.78) / imgW, (boxH * 0.9) / imgH);
+function objectCoverPoint(boxW: number, boxH: number, imgW: number, imgH: number, nx: number, ny: number) {
+  const scale = Math.max(boxW / imgW, boxH / imgH);
   const width = imgW * scale;
   const height = imgH * scale;
-  return { left: (boxW - width) / 2, top: Math.max(16, (boxH - height) / 2 + drop), width, height };
+  return { x: (boxW - width) / 2 + nx * width, y: (boxH - height) / 2 + ny * height };
 }
 
-function coverHeightFrame(boxW: number, boxH: number, imgW: number, imgH: number, plate: { x0: number; y0: number; x1: number; y1: number } | null) {
-  const spanY = plate ? Math.max(0.2, plate.y1 - plate.y0) : 1;
-  const spanX = plate ? Math.max(0.2, plate.x1 - plate.x0) : 1;
-  const scale = plate ? Math.max(boxH * 0.92 / (spanY * imgH), boxW * 0.92 / (spanX * imgW)) : boxH / imgH;
+function slabFrame(boxW: number, boxH: number, imgW: number, imgH: number, drop: number, anchor: { x: number; y: number } | null) {
+  const scale = Math.min((boxH * 0.8) / imgH, (boxW * 0.9) / imgW);
   const width = imgW * scale;
   const height = imgH * scale;
-  const cx = plate ? (plate.x0 + plate.x1) / 2 : 0.5;
-  const cy = plate ? (plate.y0 + plate.y1) / 2 : 0.5;
-  return { left: boxW / 2 - cx * width, top: boxH / 2 - cy * height, width, height };
+  const center = anchor ? objectCoverPoint(boxW, boxH, 1920, 1080, anchor.x, anchor.y) : { x: boxW / 2, y: boxH * 0.48 };
+  return { left: center.x - width / 2, top: center.y - height / 2 + drop, width, height };
+}
+
+function fitWidthFrame(boxW: number, boxH: number, imgW: number, imgH: number) {
+  const height = imgH * (boxW / imgW);
+  return { left: 0, top: Math.max(12, (boxH - height) / 2), width: boxW, height };
 }
 
 function plateFrame(boxW: number, boxH: number, imgW: number, imgH: number, plate: { x0: number; y0: number; x1: number; y1: number }) {
@@ -314,11 +316,6 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     hoverAt.current = performance.now() + 450;
   }, [phase, sceneIndex, disp, floorId, entered, bridge]);
 
-  useEffect(() => {
-    if (!arrive) return;
-    const timer = window.setTimeout(() => setArrive(false), 1500);
-    return () => window.clearTimeout(timer);
-  }, [arrive]);
 
   const activeId = active?.id;
   useEffect(() => {
@@ -559,6 +556,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       setSent(false);
       setSheet(null);
       track("unit_view", unit, { origen });
+      if (scene) pushLocation({ escena: sceneKey(scene.nombre), unidad: unit.codigo });
       return;
     }
     const onPlan = phase === "planta" || scene?.tipo === "masterplan";
@@ -695,11 +693,9 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     url.searchParams.delete("escena");
     url.searchParams.delete("planta");
     url.searchParams.delete("unidad");
-    if (loc.unidad && loc.planta) {
-      url.searchParams.set("planta", loc.planta);
-      url.searchParams.set("unidad", loc.unidad);
-    } else if (loc.planta) url.searchParams.set("planta", loc.planta);
-    else if (loc.escena) url.searchParams.set("escena", loc.escena);
+    if (loc.planta) url.searchParams.set("planta", loc.planta);
+    if (loc.unidad) url.searchParams.set("unidad", loc.unidad);
+    if (loc.escena && !loc.planta) url.searchParams.set("escena", loc.escena);
     const nextDepth = mode === "push" ? depth.current + 1 : depth.current;
     if (mode === "push") depth.current = nextDepth;
     const state = { showroom: 1, depth: nextDepth };
@@ -716,14 +712,20 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
       const unit = data.units.find((item) => item.codigo.toLowerCase() === unidad.toLowerCase());
       if (!unit) return;
       setEntered(true);
-      if (unit.floor_id) {
-        setPhase("planta");
-        setFloorId(unit.floor_id);
-      }
       setHighlightId(unit.id);
       setUnitId(unit.id);
       setPhoto(0);
       setSheet(null);
+      if (!planta && escena) {
+        const index = walk.findIndex((item) => sceneKey(item.nombre) === escena);
+        setPhase("escena");
+        if (index >= 0) setSceneIndex(index);
+        return;
+      }
+      if (unit.floor_id) {
+        setPhase("planta");
+        setFloorId(unit.floor_id);
+      }
       return;
     }
     setUnitId(null);
@@ -762,9 +764,9 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
 
   function goAerial() {
     forgetCard();
+    const fromFloor = phase === "planta";
     setDisponibilidad(false);
     setUnitId(null);
-    setSheet(null);
     const aerial = walk.findIndex((item) => item.tipo === "aereo");
     const exterior = walk.findIndex((item) => item.tipo === "exterior");
     const index = aerial >= 0 ? aerial : exterior;
@@ -772,7 +774,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     setEntered(true);
     setPhase("escena");
     if (index >= 0) setSceneIndex(index);
-    if (already) setSheet("mapa");
+    setSheet(fromFloor || already ? "mapa" : null);
   }
 
   function finishBridge() {
@@ -807,7 +809,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
 
   function stepBack() {
     if (unitId) {
-      if (depth.current > 0 && phase === "planta") {
+      if (depth.current > 0) {
         history.back();
         return;
       }
@@ -876,6 +878,15 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     return { x0: x0 - padX, y0: y0 - padY, x1: x1 + padX, y1: y1 + padY };
   })();
   const usingCorte = phase === "planta" && Boolean(floor?.corte);
+  const plateMask = !usingCorte && floor?.plano && /planta-0[3-9]\.webp/.test(floor.plano)
+    ? floor.plano.replace(/planta-(0[3-9])\.webp/, "casco-$1.png")
+    : null;
+  const towerAnchor = scene?.silueta && scene.silueta.length >= 3
+    ? {
+        x: scene.silueta.reduce((sum, point) => sum + point[0], 0) / scene.silueta.length,
+        y: scene.silueta.reduce((sum, point) => sum + point[1], 0) / scene.silueta.length,
+      }
+    : null;
   const image = !entered ? cover?.imagen_url ?? data.facade : phase === "planta" ? floor?.corte ?? floor?.plano ?? scene?.imagen_url ?? data.facade : scene?.imagen_url ?? data.facade;
   const fitCover = usingCorte || (phase !== "planta" && scene?.tipo !== "barrio" && scene?.tipo !== "masterplan");
   const showTower = entered && phase === "escena" && !disp && !bridge && scene?.tipo === "exterior" && (scene.silueta?.length ?? 0) >= 3;
@@ -886,11 +897,25 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const floorDrop = towerWait(tower, floorId);
   const showRail = entered && phase === "planta" && !active && Boolean(tower && tower.floors.length > 0);
   const polygons = zones();
+  const columns = stackMarkers(
+    polygons.flatMap((overlay) => {
+      if (overlay.vinculo_tipo !== "unit" || overlay.puntos.length < 4) return [];
+      const unit = data.units.find((item) => item.id === overlay.vinculo_id);
+      return [{ id: overlay.id, stack: unit?.orientacion || overlay.id, points: overlay.puntos }];
+    }),
+  );
+  const legendUnits = polygons.flatMap((overlay) => {
+    if (overlay.vinculo_tipo !== "unit") return [];
+    const unit = data.units.find((item) => item.id === overlay.vinculo_id);
+    if (!unit || unit.tipo !== "departamento") return [];
+    if (filtering && !matches.some((item) => item.id === unit.id)) return [];
+    return [unit];
+  });
   const cardUnit = card ? data.units.find((unit) => unit.id === card.id) ?? null : null;
   const contextText = phase === "planta" && floor ? plantaLabel(floor.nombre, floor.numero) : scene?.tipo === "aereo" || scene?.tipo === "exterior" ? "Vista aérea" : scene?.nombre ?? "";
 
   return (
-    <main className="showroom relative h-[100dvh] overflow-hidden bg-[#12110f] text-white" data-testid="showroom" style={{ ["--accent" as string]: data.project.acento }}>
+    <main className={`showroom relative h-[100dvh] overflow-hidden bg-[#12110f] text-white${showRail && railOpen ? " rail-open" : ""}`} data-testid="showroom" style={{ ["--accent" as string]: data.project.acento }}>
       <Stage
         stageRef={stageRef}
         src={image}
@@ -904,9 +929,12 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         layout={phase === "planta" && !usingCorte ? (narrow ? "tall" : "slab") : "auto"}
         plate={narrow && phase === "planta" && !usingCorte ? floorPlate : null}
         drop={phase === "planta" && !usingCorte && !narrow ? floorDrop : 0}
-        haze={phase === "planta" && !usingCorte}
+        anchor={phase === "planta" && !usingCorte && !narrow ? towerAnchor : null}
+        mask={phase === "planta" && !usingCorte && !narrow ? plateMask : null}
+        haze={false}
         arrive={arrive}
-        settle={phase === "planta"}
+        onArrived={() => setArrive(false)}
+        settle={false}
         backdrop={phase === "planta" && !usingCorte ? scene?.imagen_url ?? data.facade : null}
         video={bridge ?? (playing && videos.current ? videos.current : null)}
         poster={image}
@@ -1066,7 +1094,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           const [cx, cy] = centroid(overlay.puntos);
           const facadeHover = exterior && veils && hovered;
           const fill = facadeHover ? "#737CB5" : aerial ? "#c4a574" : color;
-          const fillOpacity = aerial ? 0.01 : facadeHover ? 0.42 : exterior && veils ? (filtering && on ? 0.7 : 0) : hovered || selected ? 0.22 : 0;
+          const fillOpacity = aerial ? 0.01 : facadeHover ? 0.62 : exterior && veils ? (filtering && on ? 0.7 : 0) : hovered || selected ? 0.22 : 0;
           return (
             <g
               key={overlay.id}
@@ -1103,9 +1131,9 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
               />
               {exterior && veils && (
                 <polygon
-                  points={markerQuad(overlay.puntos).map((point) => point.join(",")).join(" ")}
-                  fill={color}
-                  fillOpacity={0.7}
+                  points={(columns.get(overlay.id) ?? overlay.puntos).map((point) => point.join(",")).join(" ")}
+                  fill={facadeHover ? "#737CB5" : color}
+                  fillOpacity={facadeHover ? 0.95 : 0.7}
                   stroke="none"
                   pointerEvents="none"
                 />
@@ -1272,9 +1300,9 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
 
       {veils && !active && (
         <div className="legend" data-testid="legend">
-          <span><i style={{ background: STATUS_COLOR.disponible }} />Disponible {data.units.filter((unit) => unit.estado === "disponible" && unit.tipo === "departamento").length}</span>
-          <span><i style={{ background: STATUS_COLOR.reservada }} />Reservada {data.units.filter((unit) => unit.estado === "reservada" && unit.tipo === "departamento").length}</span>
-          <span><i style={{ background: STATUS_COLOR.vendida }} />Vendida {data.units.filter((unit) => unit.estado === "vendida" && unit.tipo === "departamento").length}</span>
+          <span><i style={{ background: STATUS_COLOR.disponible }} />Disponible {legendUnits.filter((unit) => unit.estado === "disponible").length}</span>
+          <span><i style={{ background: STATUS_COLOR.reservada }} />Reservada {legendUnits.filter((unit) => unit.estado === "reservada").length}</span>
+          <span><i style={{ background: STATUS_COLOR.vendida }} />Vendida {legendUnits.filter((unit) => unit.estado === "vendida").length}</span>
         </div>
       )}
 
@@ -1538,8 +1566,11 @@ function Stage({
   plate = null,
   layout = "auto",
   drop = 0,
+  anchor = null,
+  mask = null,
   haze = false,
   arrive = false,
+  onArrived,
   settle = false,
   backdrop = null,
   marks = [],
@@ -1565,8 +1596,11 @@ function Stage({
   plate?: { x0: number; y0: number; x1: number; y1: number } | null;
   layout?: "auto" | "slab" | "tall";
   drop?: number;
+  anchor?: { x: number; y: number } | null;
+  mask?: string | null;
   haze?: boolean;
   arrive?: boolean;
+  onArrived?: () => void;
   settle?: boolean;
   backdrop?: string | null;
   marks?: { id: string; x: number; y: number; color: string; label: string; dim: boolean }[];
@@ -1583,6 +1617,7 @@ function Stage({
 }) {
   const [box, setBox] = useState({ w: 1, h: 1 });
   const [natural, setNatural] = useState({ w: 16, h: 9 });
+  const [readySrc, setReadySrc] = useState("");
   const doneRef = useRef(onVideoDone);
   doneRef.current = onVideoDone;
   useEffect(() => {
@@ -1606,9 +1641,9 @@ function Stage({
     return () => node.removeEventListener("wheel", listener);
   }, [onWheel, stageRef]);
   const frame = layout === "tall"
-    ? coverHeightFrame(box.w, box.h, natural.w, natural.h, plate)
+    ? fitWidthFrame(box.w, box.h, natural.w, natural.h)
     : layout === "slab"
-      ? slabFrame(box.w, box.h, natural.w, natural.h, drop)
+      ? slabFrame(box.w, box.h, natural.w, natural.h, drop, anchor)
       : plate
         ? plateFrame(box.w, box.h, natural.w, natural.h, plate)
         : cover
@@ -1630,7 +1665,7 @@ function Stage({
       )}
       {haze && <div className="stage-haze" />}
       <div
-        className={arrive ? "absolute arrive-frame" : "absolute"}
+        className={arrive && readySrc === src ? "absolute arrive-frame" : "absolute"}
         style={{
           left: frame.left,
           top: frame.top,
@@ -1645,11 +1680,16 @@ function Stage({
           key={src}
           src={src}
           alt=""
-          className={`stage-fade h-full w-full object-fill ${soft ? "stage-soft" : ""} ${layout === "slab" ? "slab-photo" : ""} ${settle ? "settle" : ""}`}
+          className={`stage-fade h-full w-full object-fill ${soft ? "stage-soft" : ""} ${layout === "slab" && !mask ? "slab-photo" : ""} ${settle ? "settle" : ""}`}
           draggable={false}
+          style={mask ? { WebkitMaskImage: `url(${mask})`, maskImage: `url(${mask})`, maskSize: "100% 100%", maskRepeat: "no-repeat", filter: "drop-shadow(0 18px 28px rgba(0,0,0,0.5))" } : undefined}
+          onAnimationEnd={(event) => {
+            if (event.animationName === "fly-in") onArrived?.();
+          }}
           onLoad={(event) => {
             const img = event.currentTarget;
             if (img.naturalWidth) setNatural({ w: img.naturalWidth, h: img.naturalHeight });
+            setReadySrc(src);
           }}
         />
         {video && (

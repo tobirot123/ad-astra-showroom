@@ -201,7 +201,7 @@ export function MapStage({ project, pois, onClose }: { project: ShowroomData["pr
   const selected = pois.find((poi) => poi.id === active) ?? null;
   return (
     <section className="full-stage bg-[#f4f1ea]" style={{ height: "100dvh" }}>
-      <div className="absolute left-4 right-4 top-4 z-10 flex flex-wrap items-center gap-2">
+      <div className="map-filters absolute left-4 right-4 top-4 z-10 flex flex-wrap items-center gap-2">
         <button type="button" className="round" onClick={onClose} aria-label="Cerrar">×</button>
         <span className="rounded-full bg-white px-3 py-2 text-sm text-[#1c1915]">{project.nombre}</span>
         <button type="button" className={cat === "todas" ? "pill on" : "pill"} onClick={() => setCat("todas")}>Todo</button>
@@ -584,7 +584,7 @@ export function UnitSheet({
             <p className="status-chip" style={{ color: tone.color, background: tone.bg }}><i style={{ background: tone.color }} />{tone.label.toUpperCase()}</p>
           </div>
           {blocked && <p className="mt-2 text-sm text-[#8a8178]">Esta unidad no está disponible</p>}
-          <button type="button" className="enter-btn mt-3" onClick={() => setAsk(true)}>{showPrice ? formatUsd(unit.precio as number) : "Consultar precio"}</button>
+          <button type="button" className="enter-btn mt-3" onClick={() => setAsk(true)}>{blocked ? "Solicitar información" : showPrice ? formatUsd(unit.precio as number) : "Consultar precio"}</button>
           <div className="tab-row mt-4">
             {TABS.filter((item) => ready(unit, item.id, plantaImagen)).map((item) => {
               const label = item.id === "vistas" && vistaFallback ? "Ubicación" : item.label;

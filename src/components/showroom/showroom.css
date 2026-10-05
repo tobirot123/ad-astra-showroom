@@ -290,12 +290,12 @@
 }
 
 .showroom .arrive-frame img.stage-fade {
-  animation: fly-in 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: fly-in 1.05s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes fly-in {
-  from { transform: scale(1.08); filter: blur(8px); }
-  to { transform: scale(1); filter: none; }
+  from { transform: scale(1.06); }
+  to { transform: scale(1); }
 }
 
 .showroom .building-card {
@@ -1107,6 +1107,29 @@
 }
 
 @media (max-width: 767px) {
+  .showroom.rail-open .top-pills {
+    right: 108px;
+  }
+
+  .showroom .floor-rail {
+    top: 10.2rem;
+  }
+
+  .showroom .map-filters {
+    top: 10.4rem;
+    left: 0.75rem;
+    right: 0.75rem;
+  }
+
+  .showroom .stage-minimap {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    width: calc(100% - 1.5rem);
+    height: 5.5rem;
+    margin: 0.75rem auto 0.25rem;
+  }
+
   .showroom .hover-card,
   .showroom .building-card {
     left: 0.75rem !important;

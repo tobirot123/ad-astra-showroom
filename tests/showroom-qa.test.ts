@@ -27,13 +27,15 @@ function rasterize(points: [number, number][], width: number, height: number) {
       let end = Math.floor(crossings[index + 1]!);
       if (start < 0) start = 0;
       if (end >= width) end = width - 1;
+      // Un cruce de ida y vuelta no pinta la columna del puente.
+      if (start >= end) continue;
       for (let x = start; x <= end; x++) mask[y * width + x] = 1;
     }
   }
   return mask;
 }
 
-import { markerQuad } from "@/lib/domain/fachada-grilla";
+import { markerQuad, stackMarkers } from "@/lib/domain/fachada-grilla";
 import { entryFloor, facadeMatch, firstResidentialFloor, isRealTour } from "@/lib/domain/showroom-flow";
 import { buildSeed } from "@/lib/demo/seed";
 import { buildShowroom } from "@/lib/services/present";
@@ -53,21 +55,14 @@ describe("showroom QA", () => {
     }
   });
 
-  it("cada huella de los pisos 3 a 9 mide el m² interior, sin balcón, ±20%", () => {
-    const units = pol.units as { codigo: string; planta: string; tipo: string; m2_int: number | null }[];
+  it("la geometría sigue el plano aunque el m² informado sea otro", () => {
+    const units = pol.units as { codigo: string; planta: string; m2_int: number | null }[];
     const polygons = pol.polygons as Record<string, Record<string, [number, number][]>>;
-    for (const floor of PLATE_FLOORS) {
-      const list = units.filter((unit) => unit.planta === floor && unit.tipo === "departamento" && unit.m2_int);
-      expect(list.length, floor).toBeGreaterThan(2);
-      for (const unit of list) {
-        const points = polygons[floor]?.[unit.codigo];
-        expect(points?.length, unit.codigo).toBeGreaterThan(3);
-        const pixels = rasterize(points!, 1920, 1080).reduce((sum, value) => sum + value, 0);
-        const measured = pixels / PX_PER_M2;
-        const error = Math.abs(measured - unit.m2_int!) / unit.m2_int!;
-        expect(error, `${unit.codigo} ${measured.toFixed(1)} vs ${unit.m2_int}`).toBeLessThanOrEqual(0.2);
-      }
-    }
+    const listed = units.find((unit) => unit.codigo === "605")?.m2_int ?? 0;
+    const points = polygons["06"]?.["605"];
+    expect(points?.length).toBeGreaterThan(3);
+    const measured = rasterize(points!, 1920, 1080).reduce((sum, value) => sum + value, 0) / PX_PER_M2;
+    expect(measured).toBeGreaterThan(listed * 1.2);
   });
 
   it("las huellas no salen de la losa, no pisan el núcleo y no se solapan", async () => {
@@ -110,7 +105,44 @@ describe("showroom QA", () => {
       const share = openPixels / Math.max(1, unitPixels);
       expect(shared[floor], floor).toEqual([]);
       expect(share, `${floor} sin asignar ${(share * 100).toFixed(1)}%`).toBeLessThan(0.05);
+      const roomsFile = await sharp(`tests/fixtures/plates/rooms-${floor}.png`).raw().toBuffer({ resolveWithObject: true });
+      const labels = new Uint16Array(roomsFile.data.buffer, roomsFile.data.byteOffset, roomsFile.data.length / 2);
+      const totals = new Map<number, number>();
+      const hits = new Map<number, number>();
+      for (let index = 0; index < labels.length; index++) {
+        const label = labels[index] ?? 0;
+        if (!label || coreAt(index) > 0) continue;
+        totals.set(label, (totals.get(label) ?? 0) + 1);
+        if (covered[index]) hits.set(label, (hits.get(label) ?? 0) + 1);
+      }
+      for (const [label, total] of totals) {
+        if (total < 80) continue;
+        const ratio = (hits.get(label) ?? 0) / total;
+        expect(ratio <= 0.08 || ratio >= 0.92, `${floor} ambiente ${label} cortado ${ratio.toFixed(2)}`).toBe(true);
+      }
     }
+  });
+
+  it("las huellas viejas, medidas al m², no cubren la losa del plano", async () => {
+    const legacy = JSON.parse(readFileSync("tests/fixtures/plates/legacy-08.json", "utf8")) as Record<string, [number, number][]>;
+    const slabFile = await sharp("tests/fixtures/plates/slab-08.png").raw().toBuffer({ resolveWithObject: true });
+    const coreFile = await sharp("tests/fixtures/plates/core-08.png").raw().toBuffer({ resolveWithObject: true });
+    const { width, height, channels } = slabFile.info;
+    const covered = new Uint8Array(width * height);
+    for (const points of Object.values(legacy)) {
+      const mask = rasterize(points, width, height);
+      for (let index = 0; index < mask.length; index++) if (mask[index]) covered[index] = 1;
+    }
+    let unitPixels = 0;
+    let openPixels = 0;
+    for (let index = 0; index < slabFile.data.length; index++) {
+      const slab = slabFile.data[index * channels] ?? 0;
+      const core = coreFile.data[index * (coreFile.info.channels ?? 1)] ?? 0;
+      if (slab === 0 || core > 0) continue;
+      unitPixels += 1;
+      if (!covered[index]) openPixels += 1;
+    }
+    expect(openPixels / Math.max(1, unitPixels)).toBeGreaterThan(0.3);
   });
 
   it("las plantas distintas no comparten el mismo rectángulo de la grilla", () => {
@@ -151,8 +183,16 @@ describe("showroom QA", () => {
     expect(facadeMatch(two, { estados: ["disponible", "vendida"], dorms: [], areaMin: 0, areaMax: 200, areaOn: false })).toBe(true);
     const quad = markerQuad([[0, 0], [0.2, 0], [0.2, 0.1], [0, 0.1]]);
     const span = quad[1]![0] - quad[0]![0];
-    expect(span).toBeGreaterThan(0.008);
-    expect(span).toBeLessThan(0.014);
+    const height = quad[2]![1] - quad[1]![1];
+    expect(span).toBeGreaterThan(0.005);
+    expect(span).toBeLessThan(0.008);
+    expect(height).toBeGreaterThan(0.016);
+    expect(height).toBeLessThan(0.022);
+    const stacked = stackMarkers([
+      { id: "a", stack: "Norte", points: [[0.1, 0.2], [0.2, 0.2], [0.2, 0.28], [0.1, 0.28]] },
+      { id: "b", stack: "Norte", points: [[0.12, 0.4], [0.22, 0.4], [0.22, 0.48], [0.12, 0.48]] },
+    ]);
+    expect(stacked.get("a")?.[0]?.[0]).toBe(stacked.get("b")?.[0]?.[0]);
   });
 
   it("un interior común no es un tour 360", () => {
