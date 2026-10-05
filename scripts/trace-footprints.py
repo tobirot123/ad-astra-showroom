@@ -81,18 +81,28 @@ def segment(rgb: np.ndarray):
 
 
 def corridor_ids(rooms: list[dict]) -> set[int]:
+    """Pasillo alargado y, si existe, el núcleo chico pegado a él.
+
+    Un estar con varias puertas (grado alto, poco alargado) es departamento.
+    """
     if len(rooms) < 4:
         return set()
-    ranked = sorted(rooms, key=lambda room: (-room["deg"], -room["elong"]))
-    chosen = []
-    for room in ranked:
-        if room["deg"] >= 6 or (room["deg"] >= 4 and room["elong"] >= 2.4):
-            chosen.append(room["id"])
-        if len(chosen) == 2:
-            break
-    if not chosen and ranked[0]["deg"] >= 4 and ranked[0]["elong"] >= 2:
-        chosen.append(ranked[0]["id"])
-    return set(chosen)
+    spine = max(rooms, key=lambda room: (room["deg"], room["elong"], room["area"]))
+    if not (spine["deg"] >= 7 or (spine["deg"] >= 6 and spine["elong"] >= 2.0 and spine["area"] >= 8000)):
+        return set()
+    chosen = {spine["id"]}
+    stairs = [
+        room
+        for room in rooms
+        if room["id"] != spine["id"]
+        and 2000 <= room["area"] <= 5200
+        and room["elong"] < 1.25
+        and room["deg"] >= 4
+        and spine["id"] in room["neigh"]
+    ]
+    if stairs:
+        chosen.add(min(stairs, key=lambda room: room["area"])["id"])
+    return chosen
 
 
 def connected(members: set[int], adj: dict[int, set[int]]) -> bool:

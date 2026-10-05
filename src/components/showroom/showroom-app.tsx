@@ -87,6 +87,12 @@ function plantaLabel(nombre: string, numero: number) {
   return nombre;
 }
 
+function insetRing(points: [number, number][], amount: number): [number, number][] {
+  const cx = points.reduce((sum, point) => sum + point[0], 0) / points.length;
+  const cy = points.reduce((sum, point) => sum + point[1], 0) / points.length;
+  return points.map(([x, y]) => [x + (cx - x) * amount, y + (cy - y) * amount]);
+}
+
 function bandOf(points: [number, number][], thick = false): [number, number][] {
   if (points.length < 4) return points;
   const lerp = (a: [number, number], b: [number, number], t: number): [number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
@@ -156,7 +162,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const [unitTab, setUnitTab] = useState<UnitTab>("galeria");
   const [narrow, setNarrow] = useState(false);
   const [lang, setLang] = useState<"es" | "en">("es");
-  const [filterPop, setFilterPop] = useState<null | "area" | "estado" | "dorm">(null);
+  const [filterPop, setFilterPop] = useState<null | "area" | "estado" | "dorm" | "menu">(null);
   const [dorm, setDorm] = useState("todos");
   const [area, setArea] = useState<{ min: number; max: number } | null>(null);
   const [qr, setQr] = useState<string | null>(null);
@@ -407,12 +413,75 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
 
   function placeCard(x: number, y: number) {
     if (window.matchMedia("(max-width: 767px)").matches) return { x: 12, y: window.innerHeight - 12 };
-    const width = 300;
-    const height = 240;
-    return {
-      x: Math.min(window.innerWidth - width / 2 - 12, Math.max(width / 2 + 12, x)),
-      y: Math.min(window.innerHeight - 12, Math.max(height + 18, y)),
+    const width = 220;
+    const height = 196;
+    const pad = 8;
+    const pills = [...document.querySelectorAll<HTMLElement>(".plan-pill")].map((node) => {
+      const box = node.getBoundingClientRect();
+      return { left: box.left - pad, top: box.top - pad, right: box.right + pad, bottom: box.bottom + pad };
+    });
+    const clamp = (left: number, top: number) => ({
+      left: Math.min(window.innerWidth - width - 8, Math.max(8, left)),
+      top: Math.min(window.innerHeight - height - 8, Math.max(8, top)),
+    });
+    const overlap = (left: number, top: number) => {
+      const right = left + width;
+      const bottom = top + height;
+      if (left < 8 || top < 8 || right > window.innerWidth - 8 || bottom > window.innerHeight - 8) return 1e9;
+      let area = 0;
+      for (const pill of pills) {
+        const ix = Math.min(right, pill.right) - Math.max(left, pill.left);
+        const iy = Math.min(bottom, pill.bottom) - Math.max(top, pill.top);
+        if (ix > 0 && iy > 0) area += ix * iy;
+      }
+      return area;
     };
+    const candidates: { left: number; top: number }[] = [];
+    for (const gap of [16, 56, 110, 180]) {
+      candidates.push(
+        { left: x + gap, top: y - height / 2 },
+        { left: x - width - gap, top: y - height / 2 },
+        { left: x - width / 2, top: y - height - gap },
+        { left: x - width / 2, top: y + gap },
+      );
+    }
+    let best = clamp(candidates[0]!.left, candidates[0]!.top);
+    let bestScore = overlap(best.left, best.top) * 1e6 + Math.hypot(best.left + width / 2 - x, best.top + height / 2 - y);
+    for (const candidate of candidates.slice(1)) {
+      const point = clamp(candidate.left, candidate.top);
+      const score = overlap(point.left, point.top) * 1e6 + Math.hypot(point.left + width / 2 - x, point.top + height / 2 - y);
+      if (score < bestScore) {
+        best = point;
+        bestScore = score;
+      }
+    }
+    let { left, top } = best;
+    for (let guard = 0; guard < 18 && overlap(left, top) > 0 && overlap(left, top) < 1e8; guard += 1) {
+      let cx = 0;
+      let cy = 0;
+      let count = 0;
+      const right = left + width;
+      const bottom = top + height;
+      for (const pill of pills) {
+        const ix = Math.min(right, pill.right) - Math.max(left, pill.left);
+        const iy = Math.min(bottom, pill.bottom) - Math.max(top, pill.top);
+        if (ix > 0 && iy > 0) {
+          cx += (pill.left + pill.right) / 2;
+          cy += (pill.top + pill.bottom) / 2;
+          count += 1;
+        }
+      }
+      if (!count) break;
+      const awayX = left + width / 2 - cx / count;
+      const awayY = top + height / 2 - cy / count;
+      const step = 16;
+      const next = clamp(left + Math.sign(awayX || x - left) * step, top + Math.sign(awayY || y - top) * step);
+      if (next.left === left && next.top === top) break;
+      if (overlap(next.left, next.top) > overlap(left, top)) break;
+      left = next.left;
+      top = next.top;
+    }
+    return { x: left, y: top };
   }
 
   function holdCard(unit: Unit, x: number, y: number, pin: boolean) {
@@ -743,7 +812,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         cover={fitCover}
         focus={{ x: phase === "escena" ? portraitCenter(scene?.nombre) : 0.5, y: 0.48 }}
         shift={coverShift}
-        clip={phase === "escena" && scene?.tipo === "exterior" ? scene.silueta ?? undefined : undefined}
+        clip={phase === "escena" && scene?.tipo === "exterior" && scene.silueta ? (narrow ? insetRing(scene.silueta, 0.12) : scene.silueta) : undefined}
         zoom={zoom}
         pan={pan}
         soft={!entered}
@@ -972,9 +1041,12 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         <div className="top-pills">
           {disp && phase === "escena" ? (
             <>
-              <button type="button" className={filterPop === "area" ? "pill on" : "pill"} onClick={() => setFilterPop(filterPop === "area" ? null : "area")}>Filtrar área</button>
-              <button type="button" className={filterPop === "estado" ? "pill on" : "pill"} onClick={() => setFilterPop(filterPop === "estado" ? null : "estado")}>Filtrar disponibilidad</button>
-              <button type="button" className={filterPop === "dorm" ? "pill on" : "pill"} onClick={() => setFilterPop(filterPop === "dorm" ? null : "dorm")}>Filtrar dormitorios</button>
+              <button type="button" className={filterPop ? "pill on filtros-compact" : "pill filtros-compact"} onClick={() => setFilterPop(filterPop === "menu" ? null : "menu")}>Filtros</button>
+              <span className="filtros-full">
+                <button type="button" className={filterPop === "area" ? "pill on" : "pill"} onClick={() => setFilterPop(filterPop === "area" ? null : "area")}>Filtrar área</button>
+                <button type="button" className={filterPop === "estado" ? "pill on" : "pill"} onClick={() => setFilterPop(filterPop === "estado" ? null : "estado")}>Filtrar disponibilidad</button>
+                <button type="button" className={filterPop === "dorm" ? "pill on" : "pill"} onClick={() => setFilterPop(filterPop === "dorm" ? null : "dorm")}>Filtrar dormitorios</button>
+              </span>
             </>
           ) : (
             <>
@@ -1009,6 +1081,27 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
                 <label key={value} className="radio" onClick={() => setFilters({ ...filters, estado: filters.estado === value ? "todos" : value })}>
                   <input type="radio" name="estado" readOnly checked={filters.estado === value} />
                   {label}
+                </label>
+              ))}
+            </div>
+          )}
+          {disp && phase === "escena" && filterPop === "menu" && (
+            <div className="pop filtros-pop">
+              <p className="mb-2 text-sm font-medium">Área</p>
+              <input type="range" min={areaBound.min} max={areaBound.max} step="0.1" value={areaMin} onChange={(event) => setArea({ min: Math.min(Number(event.target.value), areaMax), max: areaMax })} className="w-full" />
+              <input type="range" min={areaBound.min} max={areaBound.max} step="0.1" value={areaMax} onChange={(event) => setArea({ min: areaMin, max: Math.max(Number(event.target.value), areaMin) })} className="mt-1 w-full" />
+              <p className="mb-1 mt-3 text-sm font-medium">Disponibilidad</p>
+              {([["vendida", "Vendido"], ["reservada", "Reservado"], ["disponible", "Disponible"]] as const).map(([value, label]) => (
+                <label key={value} className="radio" onClick={() => setFilters({ ...filters, estado: filters.estado === value ? "todos" : value })}>
+                  <input type="radio" name="estado-menu" readOnly checked={filters.estado === value} />
+                  {label}
+                </label>
+              ))}
+              <p className="mb-1 mt-3 text-sm font-medium">Dormitorios</p>
+              {["1", "2", "3"].map((value) => (
+                <label key={value} className="radio" onClick={() => setDorm(dorm === value ? "todos" : value)}>
+                  <input type="radio" name="dorm-menu" readOnly checked={dorm === value} />
+                  {value}
                 </label>
               ))}
             </div>

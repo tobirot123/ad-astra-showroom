@@ -57,13 +57,13 @@ export function HoverCard({
   return (
     <div className="hover-card" data-testid="hover-card" style={{ left: x, top: y }} onMouseEnter={onKeep} onMouseLeave={onLeave}>
       <p className="status-line" style={{ color: tone.color }}>{tone.label.toUpperCase()} <i /></p>
-      <p className="mt-1 text-center text-3xl font-semibold tracking-wide">{unit.codigo}</p>
-      <div className="mt-3 flex items-center justify-center gap-4 text-[13px] text-[#8a7358]">
+      <p className="mt-0.5 text-center text-xl font-semibold tracking-wide">{unit.codigo}</p>
+      <div className="mt-2 flex items-center justify-center gap-3 text-[12px] text-[#8a7358]">
         <span>▦ {unit.m2_totales != null ? `${formatM2(unit.m2_totales)} m²` : "—"}</span>
         <span>⌂ {unit.dormitorios ?? "—"}</span>
         <span>◈ {unit.banos ?? "—"}</span>
       </div>
-      <div className="mt-4 flex gap-2">
+      <div className="mt-2 flex gap-2">
         <button type="button" className="outline-pill flex-1" onClick={onEnter}>{unit.estado === "disponible" ? price : "No disponible"}</button>
         {unit.tour && <button type="button" className="outline-pill flex-1" onClick={onTour}>Tour 360°</button>}
       </div>
@@ -663,16 +663,13 @@ export function UnitSheet({
           </>
         )}
         {tab === "vistas" && (vistaSrc || unit.vista_url) && (
-          <div className="vista-frame">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={vistaSrc || unit.vista_url || ""} alt={vistaFallback ? "Ubicación en el edificio" : unit.orientacion ? `Vista al ${unit.orientacion}` : "Vista"} className="fit" style={{ objectPosition: unit.vista_encuadre }} />
-            {vistaPoints && vistaPoints.length >= 3 && (
-              <svg viewBox="0 0 1 1" preserveAspectRatio="xMidYMid meet" className="absolute inset-0 h-full w-full">
-                <polygon points={vistaPoints.map((point) => point.join(",")).join(" ")} fill="#c4a574" fillOpacity="0.45" stroke="#fff" strokeWidth="0.004" vectorEffect="non-scaling-stroke" />
-              </svg>
-            )}
-            {vistaFallback && <p className="vista-caption">Ubicación en el edificio</p>}
-          </div>
+          <PlacedPhoto
+            src={vistaSrc || unit.vista_url || ""}
+            alt={vistaFallback ? "Ubicación en el edificio" : unit.orientacion ? `Vista al ${unit.orientacion}` : "Vista"}
+            points={vistaPoints}
+            color={tone.color}
+            caption={vistaFallback ? "Ubicación en el edificio" : null}
+          />
         )}
         {tab === "planta3d" && unit.planta3d && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -693,6 +690,51 @@ export function UnitSheet({
         <button type="button" className="pill absolute right-4 top-4" onClick={onChangeFloor}>Cambiar planta</button>
       </div>
     </section>
+  );
+}
+
+function PlacedPhoto({ src, alt, points, color, caption }: { src: string; alt: string; points: [number, number][] | null; color: string; caption: string | null }) {
+  const frame = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  const [natural, setNatural] = useState({ w: 16, h: 9 });
+  useEffect(() => {
+    const node = frame.current;
+    if (!node) return;
+    const observer = new ResizeObserver(() => setBox({ w: node.clientWidth, h: node.clientHeight }));
+    observer.observe(node);
+    setBox({ w: node.clientWidth, h: node.clientHeight });
+    return () => observer.disconnect();
+  }, []);
+  const scale = box.w > 0 && box.h > 0 ? Math.min(box.w / natural.w, box.h / natural.h) : 0;
+  const width = natural.w * scale;
+  const height = natural.h * scale;
+  const left = (box.w - width) / 2;
+  const top = (box.h - height) / 2;
+  const mark = points && points.length >= 3 ? points : null;
+  const cx = mark ? mark.reduce((sum, point) => sum + point[0], 0) / mark.length : 0;
+  const cy = mark ? mark.reduce((sum, point) => sum + point[1], 0) / mark.length : 0;
+  return (
+    <div ref={frame} className="vista-frame">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        className="absolute"
+        draggable={false}
+        style={{ left, top, width: width || undefined, height: height || undefined, objectFit: "fill" }}
+        onLoad={(event) => {
+          const img = event.currentTarget;
+          if (img.naturalWidth) setNatural({ w: img.naturalWidth, h: img.naturalHeight });
+        }}
+      />
+      {mark && width > 0 && (
+        <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="absolute" style={{ left, top, width, height }}>
+          <polygon points={mark.map((point) => point.join(",")).join(" ")} fill={color} fillOpacity="0.72" stroke="#fff" strokeWidth="0.006" />
+          <circle cx={cx} cy={cy} r="0.014" fill="#fff" stroke={color} strokeWidth="0.005" />
+        </svg>
+      )}
+      {caption && <p className="vista-caption">{caption}</p>}
+    </div>
   );
 }
 
