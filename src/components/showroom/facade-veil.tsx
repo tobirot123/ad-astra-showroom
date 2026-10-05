@@ -6,18 +6,19 @@ import { STATUS_COLOR } from "@/lib/domain/format";
 
 type Unit = { id: string; estado: string };
 
-const REST = 0.35;
-const HOVER = 0.62;
-const DIM = 0.08;
+const MARKER = 0.7;
+const HOVER = 0.42;
+const LAVENDER = [0x73, 0x7c, 0xb5];
 
 /**
- * Pinta la máscara del estudio sobre la foto. El pase de color se tiñe
- * con el estado de cada unidad; el PNG con alpha usa el mismo velo.
+ * Disponibilidad sobre la máscara: un bloque de estado por unidad y,
+ * con un filtro activo, el vano entero de las que coinciden.
  */
 export function FacadeVeil({
   mask,
   units,
   matched,
+  filtering,
   hoverId,
   onHover,
   onPick,
@@ -25,6 +26,7 @@ export function FacadeVeil({
   mask: FacadeMask;
   units: Unit[];
   matched: (unitId: string) => boolean;
+  filtering: boolean;
   hoverId: string | null;
   onHover: (unitId: string | null, point: { x: number; y: number } | null) => void;
   onPick: (unitId: string) => void;
@@ -95,7 +97,7 @@ export function FacadeVeil({
   useEffect(() => {
     paint();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hoverId, units, matched]);
+  }, [hoverId, units, matched, filtering]);
 
   function paint() {
     const map = index.current;
@@ -109,18 +111,51 @@ export function FacadeVeil({
     }
     const image = ctx.createImageData(map.width, map.height);
     const colorOf = new Map(units.map((unit) => {
-      const hex = (STATUS_COLOR[unit.estado] ?? "#1f8a5b").replace("#", "");
-      return [unit.id, [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)]];
+      const hex = (STATUS_COLOR[unit.estado] ?? "#1ac366").replace("#", "");
+      return [unit.id, [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)] as const];
     }));
     const ids = units.map((unit) => unit.id);
+    const box = new Map<string, { x0: number; y0: number; x1: number; y1: number }>();
     for (let i = 0; i < map.pixels.length; i += 1) {
       const slot = map.pixels[i];
       if (!slot) continue;
       const unitId = ids[slot - 1];
       if (!unitId) continue;
-      const rgb = colorOf.get(unitId);
+      const x = i % map.width;
+      const y = Math.floor(i / map.width);
+      const current = box.get(unitId);
+      if (!current) box.set(unitId, { x0: x, y0: y, x1: x, y1: y });
+      else {
+        current.x0 = Math.min(current.x0, x);
+        current.y0 = Math.min(current.y0, y);
+        current.x1 = Math.max(current.x1, x);
+        current.y1 = Math.max(current.y1, y);
+      }
+    }
+    const marker = new Map<string, { x0: number; y0: number; x1: number; y1: number }>();
+    for (const [unitId, bounds] of box) {
+      const span = bounds.x1 - bounds.x0;
+      const blockW = Math.max(4, Math.round(map.width * (span < map.width * 0.04 ? 0.012 : 0.007)));
+      const blockH = Math.max(8, Math.round(map.height * 0.016));
+      const x0 = bounds.x0 + Math.round(span * 0.1);
+      const y0 = Math.round((bounds.y0 + bounds.y1) / 2 - blockH / 2);
+      marker.set(unitId, { x0, y0, x1: x0 + blockW, y1: y0 + blockH });
+    }
+    for (let i = 0; i < map.pixels.length; i += 1) {
+      const slot = map.pixels[i];
+      if (!slot) continue;
+      const unitId = ids[slot - 1];
+      if (!unitId) continue;
+      const x = i % map.width;
+      const y = Math.floor(i / map.width);
+      const hit = marker.get(unitId);
+      const onMarker = Boolean(hit && x >= hit.x0 && x <= hit.x1 && y >= hit.y0 && y <= hit.y1);
+      const lit = filtering && matched(unitId);
+      const hovered = hoverId === unitId;
+      if (!hovered && !lit && !onMarker) continue;
+      const rgb = hovered ? LAVENDER : colorOf.get(unitId);
       if (!rgb) continue;
-      const alpha = !matched(unitId) ? DIM : hoverId === unitId ? HOVER : REST;
+      const alpha = hovered ? HOVER : MARKER;
       const offset = i * 4;
       image.data[offset] = rgb[0];
       image.data[offset + 1] = rgb[1];

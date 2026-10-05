@@ -30,10 +30,10 @@ export function FullIcon() {
 }
 
 function statusTone(estado: string) {
-  if (estado === "disponible") return { color: "#1f8a5b", label: "Disponible" };
-  if (estado === "reservada") return { color: "#c49214", label: "Reservada" };
-  if (estado === "vendida") return { color: "#b42318", label: "Vendida" };
-  return { color: STATUS_COLOR[estado] ?? "#667085", label: STATUS_LABEL[estado] ?? estado };
+  if (estado === "disponible") return { color: "#12b76a", bg: "#e8f9f0", label: "Disponible" };
+  if (estado === "reservada") return { color: "#a15c07", bg: "#fef7e6", label: "Reservada" };
+  if (estado === "vendida") return { color: "#de7777", bg: "#fdecec", label: "Vendida" };
+  return { color: STATUS_COLOR[estado] ?? "#667085", bg: "#f2f4f7", label: STATUS_LABEL[estado] ?? estado };
 }
 
 export function HoverCard({
@@ -200,7 +200,7 @@ export function MapStage({ project, pois, onClose }: { project: ShowroomData["pr
   const shown = cat === "todas" ? pois : pois.filter((poi) => poi.categoria === cat);
   const selected = pois.find((poi) => poi.id === active) ?? null;
   return (
-    <section className="full-stage bg-[#f4f1ea]">
+    <section className="full-stage bg-[#f4f1ea]" style={{ height: "100dvh" }}>
       <div className="absolute left-4 right-4 top-4 z-10 flex flex-wrap items-center gap-2">
         <button type="button" className="round" onClick={onClose} aria-label="Cerrar">×</button>
         <span className="rounded-full bg-white px-3 py-2 text-sm text-[#1c1915]">{project.nombre}</span>
@@ -483,6 +483,7 @@ export function UnitSheet({
   setPhoto,
   onClose,
   onChangeFloor,
+  onLocate,
   onWhatsapp,
   onLead,
 }: {
@@ -503,6 +504,7 @@ export function UnitSheet({
   setPhoto: (index: number) => void;
   onClose: () => void;
   onChangeFloor: () => void;
+  onLocate?: () => void;
   onWhatsapp: () => void;
   onShare: () => void;
   onLead: (form: FormData) => void;
@@ -579,9 +581,10 @@ export function UnitSheet({
               <h2 className="text-3xl font-semibold">{unit.codigo}</h2>
               {unit.tipologia && <p className="text-sm text-[#8a8178]">Modelo {unit.tipologia}</p>}
             </div>
-            <p className="status-line" style={{ color: tone.color }}>{tone.label.toUpperCase()} <i /></p>
+            <p className="status-chip" style={{ color: tone.color, background: tone.bg }}><i style={{ background: tone.color }} />{tone.label.toUpperCase()}</p>
           </div>
           {blocked && <p className="mt-2 text-sm text-[#8a8178]">Esta unidad no está disponible</p>}
+          <button type="button" className="enter-btn mt-3" onClick={() => setAsk(true)}>{showPrice ? formatUsd(unit.precio as number) : "Consultar precio"}</button>
           <div className="tab-row mt-4">
             {TABS.filter((item) => ready(unit, item.id, plantaImagen)).map((item) => {
               const label = item.id === "vistas" && vistaFallback ? "Ubicación" : item.label;
@@ -690,7 +693,24 @@ export function UnitSheet({
         )}
         {tab === "recorrido" && unit.tour && <Panorama tour={unit.tour} />}
         {tab === "video" && unit.videos[0] && <video src={unit.videos[0]} controls className="fit" />}
-        <button type="button" className="pill absolute right-4 top-4" onClick={onChangeFloor}>Cambiar planta</button>
+        <button type="button" className="pill absolute left-4 top-4" onClick={onChangeFloor}>Cambiar planta</button>
+        <div className="stage-switch">
+          {TABS.filter((item) => ready(unit, item.id, plantaImagen)).map((item) => {
+            const label = item.id === "vistas" && vistaFallback ? "Ubicación" : item.label;
+            const on = tab === item.id;
+            return (
+              <button key={item.id} type="button" className={on ? "on" : ""} onClick={() => setTab(item.id)} aria-label={label}>
+                <TabGlyph name={item.id} />
+                {on && <span>{label}</span>}
+              </button>
+            );
+          })}
+        </div>
+        {plantaImagen && (
+          <button type="button" className="stage-minimap" onClick={() => onLocate?.()} aria-label="Ubicación en planta">
+            <FloorHighlight src={plantaImagen} points={footprint} codigo={unit.codigo} compact />
+          </button>
+        )}
       </div>
     </section>
   );

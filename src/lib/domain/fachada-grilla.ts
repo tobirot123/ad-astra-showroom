@@ -42,6 +42,17 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
+/** Bloque de estado dentro del vano, en el mismo lugar relativo de cada piso para que formen una columna. */
+export function markerQuad(points: Point[]): Point[] {
+  if (points.length < 4) return points;
+  const quad: Quad = [points[0]!, points[1]!, points[2]!, points[3]!];
+  const width = Math.hypot(quad[1][0] - quad[0][0], quad[1][1] - quad[0][1]);
+  const narrow = width < 0.045;
+  const u0 = narrow ? 0.04 : 0.08;
+  const u1 = narrow ? 0.2 : 0.135;
+  return [onQuad(quad, u0, 0.16), onQuad(quad, u1, 0.16), onQuad(quad, u1, 0.84), onQuad(quad, u0, 0.84)];
+}
+
 /** Punto del plano de la fachada. v constante es una losa; u constante es un montante. */
 export function onQuad(quad: Quad, u: number, v: number): Point {
   const top: Point = [lerp(quad[0][0], quad[1][0], u), lerp(quad[0][1], quad[1][1], u)];

@@ -33,7 +33,8 @@ function rasterize(points: [number, number][], width: number, height: number) {
   return mask;
 }
 
-import { firstResidentialFloor, isRealTour } from "@/lib/domain/showroom-flow";
+import { markerQuad } from "@/lib/domain/fachada-grilla";
+import { entryFloor, facadeMatch, firstResidentialFloor, isRealTour } from "@/lib/domain/showroom-flow";
 import { buildSeed } from "@/lib/demo/seed";
 import { buildShowroom } from "@/lib/services/present";
 
@@ -124,14 +125,34 @@ describe("showroom QA", () => {
     }
   });
 
-  it("Ver plantas abre el primer piso residencial, no el techo", () => {
-    const floors = [
-      { numero: 20, libres: 0, id: "techo" },
-      { numero: 11, libres: 2, id: "11" },
-      { numero: 1, libres: 4, id: "1" },
-    ];
-    expect(firstResidentialFloor(floors)?.id).toBe("1");
-    expect(firstResidentialFloor([{ numero: 20, libres: 0, id: "techo" }, { numero: 4, libres: 0, id: "4" }, { numero: 2, libres: 1, id: "2" }])?.id).toBe("2");
+  it("Ver plantas abre el piso residencial más alto", () => {
+    expect(entryFloor([
+      { numero: 20, id: "techo", plano: "/t.webp" },
+      { numero: 11, id: "11", plano: "/11.webp" },
+      { numero: 1, id: "1", plano: "/1.webp" },
+    ])?.id).toBe("11");
+    expect(entryFloor([
+      { numero: 20, id: "techo", plano: "/t.webp" },
+    ])?.id).toBe("techo");
+    expect(entryFloor([
+      { numero: 4, id: "4", plano: "/4.webp" },
+      { numero: 2, id: "2", plano: "/2.webp" },
+    ])?.id).toBe("4");
+    expect(firstResidentialFloor([{ numero: 20, libres: 0, id: "techo" }, { numero: 1, libres: 4, id: "1" }])?.id).toBe("1");
+  });
+
+  it("los filtros de fachada combinan dormitorios y estado", () => {
+    const two = { estado: "disponible", dormitorios: 2, m2_totales: 70 };
+    const sold = { estado: "vendida", dormitorios: 2, m2_totales: 70 };
+    const one = { estado: "disponible", dormitorios: 1, m2_totales: 40 };
+    expect(facadeMatch(two, { estados: ["disponible"], dorms: ["2"], areaMin: 0, areaMax: 200, areaOn: false })).toBe(true);
+    expect(facadeMatch(sold, { estados: ["disponible"], dorms: ["2"], areaMin: 0, areaMax: 200, areaOn: false })).toBe(false);
+    expect(facadeMatch(one, { estados: [], dorms: ["2"], areaMin: 0, areaMax: 200, areaOn: false })).toBe(false);
+    expect(facadeMatch(two, { estados: ["disponible", "vendida"], dorms: [], areaMin: 0, areaMax: 200, areaOn: false })).toBe(true);
+    const quad = markerQuad([[0, 0], [0.2, 0], [0.2, 0.1], [0, 0.1]]);
+    const span = quad[1]![0] - quad[0]![0];
+    expect(span).toBeGreaterThan(0.008);
+    expect(span).toBeLessThan(0.014);
   });
 
   it("un interior común no es un tour 360", () => {

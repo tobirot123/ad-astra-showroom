@@ -82,9 +82,9 @@ export const ROLE_LABEL: Record<string, string> = {
 };
 
 export const STATUS_COLOR: Record<string, string> = {
-  disponible: "#1f8a5b",
-  reservada: "#c49214",
-  vendida: "#b42318",
+  disponible: "#1ac366",
+  reservada: "#deca6e",
+  vendida: "#de7777",
   bloqueada: "#667085",
   pausa: "#5b6b7a",
   oculta: "#98a2b3",

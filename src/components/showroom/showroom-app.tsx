@@ -13,7 +13,8 @@ import "./showroom.css";
 import { coverFrame, portraitCenter } from "@/lib/domain/cover-frame";
 import { interiorPoint } from "@/lib/domain/polygon";
 import { AmenityStage, ContactStage, FullIcon, GalleryStage, HoverCard, MapStage, PhMenu, QrIcon, RecorridoStage, UnitSheet, VideoStage } from "@/components/showroom/ph-panels";
-import { firstResidentialFloor, sceneKey, sortUnits, tourEmbed, unitMatches, videosToLoad, type FlowFilters } from "@/lib/domain/showroom-flow";
+import { markerQuad } from "@/lib/domain/fachada-grilla";
+import { entryFloor, facadeMatch, sceneKey, sortUnits, tourEmbed, unitMatches, videosToLoad, type FlowFilters } from "@/lib/domain/showroom-flow";
 import type { ShowroomData } from "@/lib/services/present";
 
 type Unit = ShowroomData["units"][number];
@@ -82,6 +83,12 @@ function floorMark(nombre: string, numero: number) {
   return String(numero);
 }
 
+function towerWait(tower: { floors: { id: string }[] } | null, floorId: string | null) {
+  if (!tower || !floorId) return 0;
+  const index = tower.floors.findIndex((item) => item.id === floorId);
+  return index < 0 ? 0 : Math.min(36, index * 5);
+}
+
 function plantaLabel(nombre: string, numero: number) {
   if (/^piso\s+\d+/i.test(nombre)) return `Planta ${numero}`;
   return nombre;
@@ -93,16 +100,22 @@ function insetRing(points: [number, number][], amount: number): [number, number]
   return points.map(([x, y]) => [x + (cx - x) * amount, y + (cy - y) * amount]);
 }
 
-function bandOf(points: [number, number][], thick = false): [number, number][] {
-  if (points.length < 4) return points;
-  const lerp = (a: [number, number], b: [number, number], t: number): [number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-  const topLeft = points[0]!;
-  const topRight = points[1]!;
-  const bottomRight = points[2]!;
-  const bottomLeft = points[3]!;
-  const start = thick ? 0.32 : 0.4;
-  const end = thick ? 0.68 : 0.58;
-  return [lerp(topLeft, bottomLeft, start), lerp(topRight, bottomRight, start), lerp(topRight, bottomRight, end), lerp(topLeft, bottomLeft, end)];
+function slabFrame(boxW: number, boxH: number, imgW: number, imgH: number, drop: number) {
+  const scale = Math.min((boxW * 0.78) / imgW, (boxH * 0.9) / imgH);
+  const width = imgW * scale;
+  const height = imgH * scale;
+  return { left: (boxW - width) / 2, top: Math.max(16, (boxH - height) / 2 + drop), width, height };
+}
+
+function coverHeightFrame(boxW: number, boxH: number, imgW: number, imgH: number, plate: { x0: number; y0: number; x1: number; y1: number } | null) {
+  const spanY = plate ? Math.max(0.2, plate.y1 - plate.y0) : 1;
+  const spanX = plate ? Math.max(0.2, plate.x1 - plate.x0) : 1;
+  const scale = plate ? Math.max(boxH * 0.92 / (spanY * imgH), boxW * 0.92 / (spanX * imgW)) : boxH / imgH;
+  const width = imgW * scale;
+  const height = imgH * scale;
+  const cx = plate ? (plate.x0 + plate.x1) / 2 : 0.5;
+  const cy = plate ? (plate.y0 + plate.y1) / 2 : 0.5;
+  return { left: boxW / 2 - cx * width, top: boxH / 2 - cy * height, width, height };
 }
 
 function plateFrame(boxW: number, boxH: number, imgW: number, imgH: number, plate: { x0: number; y0: number; x1: number; y1: number }) {
@@ -163,8 +176,16 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const [narrow, setNarrow] = useState(false);
   const [lang, setLang] = useState<"es" | "en">("es");
   const [filterPop, setFilterPop] = useState<null | "area" | "estado" | "dorm" | "menu">(null);
-  const [dorm, setDorm] = useState("todos");
+  const [estados, setEstados] = useState<string[]>([]);
+  const [dorms, setDorms] = useState<string[]>([]);
   const [area, setArea] = useState<{ min: number; max: number } | null>(null);
+  const [towerCard, setTowerCard] = useState<{ x: number; y: number } | null>(null);
+  const [towerHot, setTowerHot] = useState(false);
+  const [chip, setChip] = useState<{ label: string; x: number; y: number } | null>(null);
+  const hoverAt = useRef(0);
+  const [arrive, setArrive] = useState(false);
+  const [railOpen, setRailOpen] = useState(true);
+  const [hint, setHint] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
   const pinned = useRef(false);
   const depth = useRef(0);
@@ -193,11 +214,12 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   const areaMin = area?.min ?? areaBound.min;
   const areaMax = area?.max ?? areaBound.max;
   const areaActive = area != null && (area.min > areaBound.min + 0.05 || area.max < areaBound.max - 0.05);
-  const filtering = filters.estado !== "todos" || filters.ambientes !== "todos" || filters.orientacion !== "todas" || Boolean(filters.precioMax) || dorm !== "todos" || areaActive || Object.values(extra).some((value) => value && value !== "todos");
+  const filtering = filters.ambientes !== "todos" || filters.orientacion !== "todas" || Boolean(filters.precioMax) || estados.length > 0 || dorms.length > 0 || areaActive || Object.values(extra).some((value) => value && value !== "todos");
 
   const matches = useMemo(() => {
     return sortUnits(data.units.filter((unit) => {
-      if (!unitMatches(unit, filters)) return false;
+      if (!unitMatches(unit, { ...filters, estado: "todos", ambientes: "todos" })) return false;
+      if (!facadeMatch(unit, { estados, dorms, areaMin, areaMax, areaOn: areaActive })) return false;
       for (const field of data.filters.fields) {
         const selected = extra[field.clave];
         if (!selected || selected === "todos") continue;
@@ -206,11 +228,9 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           if (String(Boolean(value)) !== selected) return false;
         } else if (String(value ?? "") !== selected) return false;
       }
-      if (dorm !== "todos" && String(unit.dormitorios ?? "") !== dorm) return false;
-      if (areaActive && unit.m2_totales != null && (unit.m2_totales < areaMin || unit.m2_totales > areaMax)) return false;
       return true;
     }), filters.sort);
-  }, [data.units, data.filters.fields, filters, extra, dorm, areaActive, areaMin, areaMax]);
+  }, [data.units, data.filters.fields, filters, extra, estados, dorms, areaActive, areaMin, areaMax]);
 
   useEffect(() => {
     const { visitor, session, fresh } = identity();
@@ -283,6 +303,23 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [entered, phase, sheet, unitId, walk.length, sceneIndex, lite, bridge, scene]);
 
+  useEffect(() => {
+    pinned.current = false;
+    setCard(null);
+    setHoverId(null);
+    setTowerCard(null);
+    setTowerHot(false);
+    setChip(null);
+    setFilterPop(null);
+    hoverAt.current = performance.now() + 450;
+  }, [phase, sceneIndex, disp, floorId, entered, bridge]);
+
+  useEffect(() => {
+    if (!arrive) return;
+    const timer = window.setTimeout(() => setArrive(false), 1500);
+    return () => window.clearTimeout(timer);
+  }, [arrive]);
+
   const activeId = active?.id;
   useEffect(() => {
     if (!activeId) return;
@@ -344,6 +381,12 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     setZoom(1);
     setPan({ x: 0, y: 0 });
     setSheet(null);
+    setArrive(false);
+    setRailOpen(true);
+    if (window.matchMedia("(max-width: 767px)").matches) {
+      setHint(true);
+      window.setTimeout(() => setHint(false), 2500);
+    }
   }
 
   function openOnPlan(unit: Unit, card: boolean) {
@@ -400,7 +443,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     if (scene.tipo === "masterplan") {
       return data.overlays.filter((overlay) => overlay.contenedor === "masterplan" && overlay.contenedor_id === scene.building_id);
     }
-    if (scene.tipo === "exterior") return disp && maskReady(scene.mascara) ? [] : scene.hotspots;
+    if (scene.tipo === "exterior") return disp && !maskReady(scene.mascara) ? scene.hotspots : [];
     return [];
   }
 
@@ -409,6 +452,9 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     pinned.current = false;
     setCard(null);
     setHoverId(null);
+    setTowerCard(null);
+    setTowerHot(false);
+    setChip(null);
   }
 
   function placeCard(x: number, y: number) {
@@ -503,13 +549,34 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   function enterUnit(unit: Unit, origen: string, tab?: UnitTab) {
     forgetCard();
     const plantaImagen = data.buildings.flatMap((item) => item.floors).find((item) => item.id === unit.floor_id)?.plano ?? null;
-    const order: UnitTab[] = ["galeria", "vistas", "planta3d", "planos", "recorrido", "video"];
+    const order: UnitTab[] = ["planta3d", "galeria", "planos", "vistas", "recorrido", "video"];
     const next = tab && tabReady(unit, tab, plantaImagen) ? tab : order.find((item) => tabReady(unit, item, plantaImagen)) ?? "planos";
     setUnitTab(next);
     setPhoto(0);
+    if (disp && phase === "escena" && !narrow) {
+      setHighlightId(unit.id);
+      setUnitId(unit.id);
+      setSent(false);
+      setSheet(null);
+      track("unit_view", unit, { origen });
+      return;
+    }
     const onPlan = phase === "planta" || scene?.tipo === "masterplan";
     if (onPlan) chooseUnit(unit, origen);
     else revealUnit(unit);
+  }
+
+  function locateOnPlan() {
+    const unit = data.units.find((item) => item.id === unitId);
+    if (!unit?.floor_id) return;
+    setUnitId(null);
+    setHighlightId(unit.id);
+    setPhase("planta");
+    setFloorId(unit.floor_id);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    pinned.current = true;
+    setCard({ id: unit.id, x: Math.round(window.innerWidth / 2 - 110), y: Math.round(window.innerHeight / 2) });
   }
 
   function onZone(overlay: Overlay, point?: { x: number; y: number }) {
@@ -523,6 +590,10 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     setTip(null);
     const x = point?.x ?? window.innerWidth / 2;
     const y = point?.y ?? window.innerHeight / 2;
+    if (disp && phase === "escena" && !narrow) {
+      enterUnit(unit, "fachada");
+      return;
+    }
     holdCard(unit, x, y, true);
   }
 
@@ -684,12 +755,24 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     setSceneIndex(0);
     setUnitId(null);
     setSheet(null);
+    setArrive(true);
     const first = walk[0];
     if (first) pushLocation({ escena: sceneKey(first.nombre) });
-    if (!lite && cover?.video_url) {
-      setAfterBridge(null);
-      setBridge(cover.video_url);
-    }
+  }
+
+  function goAerial() {
+    forgetCard();
+    setDisponibilidad(false);
+    setUnitId(null);
+    setSheet(null);
+    const aerial = walk.findIndex((item) => item.tipo === "aereo");
+    const exterior = walk.findIndex((item) => item.tipo === "exterior");
+    const index = aerial >= 0 ? aerial : exterior;
+    const already = phase === "escena" && !disp && index >= 0 && sceneIndex === index;
+    setEntered(true);
+    setPhase("escena");
+    if (index >= 0) setSceneIndex(index);
+    if (already) setSheet("mapa");
   }
 
   function finishBridge() {
@@ -724,15 +807,14 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
 
   function stepBack() {
     if (unitId) {
-      if (depth.current > 0) {
+      if (depth.current > 0 && phase === "planta") {
         history.back();
         return;
       }
       setUnitId(null);
       setHighlightId(null);
-      if (floor) pushLocation({ planta: floor.clave }, "replace");
+      if (phase === "planta" && floor) pushLocation({ planta: floor.clave }, "replace");
       setEntered(true);
-      setPhase("planta");
       return;
     }
     if (phase === "planta") {
@@ -755,8 +837,8 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
   }
 
   function goPlans() {
-    const source = building?.floors ?? [];
-    const next = firstResidentialFloor(source);
+    const source = building?.floors ?? data.buildings[0]?.floors ?? [];
+    const next = entryFloor(source);
     if (!next) return;
     if (!lite && scene?.vuelo_url) {
       setAfterBridge({ kind: "floor", id: next.id });
@@ -793,12 +875,15 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
     const padY = (y1 - y0) * 0.08;
     return { x0: x0 - padX, y0: y0 - padY, x1: x1 + padX, y1: y1 + padY };
   })();
-  const image = !entered ? cover?.imagen_url ?? data.facade : phase === "planta" ? floor?.plano ?? scene?.imagen_url ?? data.facade : scene?.imagen_url ?? data.facade;
-  const fitCover = phase !== "planta" && scene?.tipo !== "barrio" && scene?.tipo !== "masterplan";
+  const usingCorte = phase === "planta" && Boolean(floor?.corte);
+  const image = !entered ? cover?.imagen_url ?? data.facade : phase === "planta" ? floor?.corte ?? floor?.plano ?? scene?.imagen_url ?? data.facade : scene?.imagen_url ?? data.facade;
+  const fitCover = usingCorte || (phase !== "planta" && scene?.tipo !== "barrio" && scene?.tipo !== "masterplan");
+  const showTower = entered && phase === "escena" && !disp && !bridge && scene?.tipo === "exterior" && (scene.silueta?.length ?? 0) >= 3;
   const veils = disp && phase === "escena" && scene?.tipo === "exterior" && !bridge && !playing;
   const tower = phase === "planta"
     ? data.buildings.find((item) => item.floors.some((floorItem) => floorItem.id === floorId)) ?? building
     : building;
+  const floorDrop = towerWait(tower, floorId);
   const showRail = entered && phase === "planta" && !active && Boolean(tower && tower.floors.length > 0);
   const polygons = zones();
   const cardUnit = card ? data.units.find((unit) => unit.id === card.id) ?? null : null;
@@ -816,8 +901,13 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         zoom={zoom}
         pan={pan}
         soft={!entered}
-        plate={narrow && phase === "planta" ? floorPlate : null}
-        backdrop={phase === "planta" ? scene?.imagen_url ?? data.facade : null}
+        layout={phase === "planta" && !usingCorte ? (narrow ? "tall" : "slab") : "auto"}
+        plate={narrow && phase === "planta" && !usingCorte ? floorPlate : null}
+        drop={phase === "planta" && !usingCorte && !narrow ? floorDrop : 0}
+        haze={phase === "planta" && !usingCorte}
+        arrive={arrive}
+        settle={phase === "planta"}
+        backdrop={phase === "planta" && !usingCorte ? scene?.imagen_url ?? data.facade : null}
         video={bridge ?? (playing && videos.current ? videos.current : null)}
         poster={image}
         onVideoDone={() => {
@@ -828,7 +918,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           const unit = overlay.vinculo_tipo === "unit" ? data.units.find((item) => item.id === overlay.vinculo_id) : undefined;
           if (!unit) return [];
           const [x, y] = centroid(overlay.puntos);
-          return [{ id: overlay.id, x, y, color: STATUS_COLOR[unit.estado] ?? "#1f8a5b", label: unit.codigo, dim: !matched(unit.id) }];
+          return [{ id: overlay.id, x, y, color: STATUS_COLOR[unit.estado] ?? "#1ac366", label: unit.codigo, dim: filtering && !matched(unit.id) }];
         }) : []}
         onPointerDown={(event) => {
           moved.current = false;
@@ -839,11 +929,13 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
             swipe.current = null;
           }
           const target = event.target as HTMLElement;
-          if (!target.closest("g") && !target.closest(".hover-card")) {
+          if (!target.closest("g") && !target.closest(".hover-card") && !target.closest(".building-card")) {
             pinned.current = false;
             setCard(null);
+            setTowerCard(null);
+            setTowerHot(false);
           }
-          if (zoom > 1) {
+          if (zoom > 1 || (phase === "planta" && narrow)) {
             drag.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y };
             return;
           }
@@ -906,65 +998,115 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
             mask={scene.mascara}
             units={data.units}
             matched={(unitId) => matched(unitId)}
+            filtering={filtering}
             hoverId={hoverId}
             onHover={(unitId, point) => {
+              if (performance.now() < hoverAt.current) return;
               setHoverId(unitId);
               const unit = unitId ? data.units.find((item) => item.id === unitId) : undefined;
-              if (unit && point && !window.matchMedia("(pointer: coarse)").matches) holdCard(unit, point.x, point.y, false);
-              else if (!unitId) releaseCard();
+              if (narrow) return;
+              if (unit && point) setChip({ label: unit.codigo, x: point.x, y: point.y });
+              else setChip(null);
             }}
             onPick={(unitId) => {
               if (moved.current) return;
               const unit = data.units.find((item) => item.id === unitId);
               if (!unit) return;
               setTip(null);
-              holdCard(unit, window.innerWidth / 2, window.innerHeight * 0.42, true);
+              if (narrow) holdCard(unit, window.innerWidth / 2, window.innerHeight * 0.42, true);
+              else enterUnit(unit, "fachada");
             }}
           />
         ) : null}
       >
+        {showTower && scene?.silueta && (
+          <g
+            className="cursor-pointer"
+            onPointerMove={(event) => {
+              if (performance.now() < hoverAt.current || narrow || event.pointerType === "touch") return;
+              setTowerHot(true);
+              setTowerCard({ x: event.clientX, y: event.clientY });
+            }}
+            onMouseEnter={(event) => {
+              if (performance.now() < hoverAt.current || narrow) return;
+              setTowerHot(true);
+              setTowerCard({ x: event.clientX, y: event.clientY });
+            }}
+            onMouseLeave={() => {
+              if (pinned.current) return;
+              setTowerHot(false);
+              setTowerCard(null);
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (moved.current) return;
+              pinned.current = true;
+              setTowerHot(true);
+              setTowerCard({ x: event.clientX, y: event.clientY });
+            }}
+          >
+            <polygon
+              points={scene.silueta.map((point) => point.join(",")).join(" ")}
+              fill="#737CB5"
+              fillOpacity={towerHot ? 0.42 : 0}
+              stroke="none"
+              pointerEvents="fill"
+              style={{ transition: "fill-opacity 150ms ease-in-out" }}
+            />
+          </g>
+        )}
         {polygons.map((overlay) => {
           const unit = overlay.vinculo_tipo === "unit" ? data.units.find((item) => item.id === overlay.vinculo_id) : undefined;
-          const color = unit ? STATUS_COLOR[unit.estado] ?? "#1f8a5b" : "#c4a574";
+          const color = unit ? STATUS_COLOR[unit.estado] ?? "#1ac366" : "#c4a574";
           const on = matched(unit?.id ?? overlay.vinculo_id);
           const selected = highlightId && (highlightId === unit?.id || highlightId === overlay.vinculo_id);
           const aerial = overlay.vinculo_tipo === "building";
           const exterior = phase === "escena" && !aerial;
           const hovered = hoverId === overlay.id;
           const [cx, cy] = centroid(overlay.puntos);
-          const fillOpacity = aerial ? 0.01 : exterior && veils ? 0 : hovered || selected ? 0.22 : 0;
+          const facadeHover = exterior && veils && hovered;
+          const fill = facadeHover ? "#737CB5" : aerial ? "#c4a574" : color;
+          const fillOpacity = aerial ? 0.01 : facadeHover ? 0.42 : exterior && veils ? (filtering && on ? 0.7 : 0) : hovered || selected ? 0.22 : 0;
           return (
             <g
               key={overlay.id}
               onClick={(event) => { event.stopPropagation(); onZone(overlay, { x: event.clientX, y: event.clientY }); }}
+              onPointerMove={(event) => {
+                if (performance.now() < hoverAt.current || event.pointerType === "touch") return;
+                if (!unit || window.matchMedia("(pointer: coarse)").matches) return;
+                setHoverId(overlay.id);
+                if (exterior && veils) setChip({ label: unit.codigo, x: event.clientX, y: event.clientY });
+                else holdCard(unit, event.clientX, event.clientY, false);
+              }}
               onMouseEnter={(event) => {
+                if (performance.now() < hoverAt.current) return;
                 if (!unit) return;
                 if (window.matchMedia("(pointer: coarse)").matches) return;
                 setHoverId(overlay.id);
-                holdCard(unit, event.clientX, event.clientY, false);
+                if (exterior && veils) setChip({ label: unit.codigo, x: event.clientX, y: event.clientY });
+                else holdCard(unit, event.clientX, event.clientY, false);
               }}
               onMouseLeave={() => {
                 setHoverId((current) => (current === overlay.id ? null : current));
+                setChip(null);
                 releaseCard();
               }}
               className="cursor-pointer"
             >
               <polygon
                 points={overlay.puntos.map((point) => point.join(",")).join(" ")}
-                fill={aerial ? "#c4a574" : color}
-                fillOpacity={on ? fillOpacity : 0.04}
+                fill={fill}
+                fillOpacity={on || facadeHover || (exterior && veils && filtering) ? fillOpacity : exterior && veils ? 0 : 0.04}
                 stroke="none"
                 pointerEvents="fill"
-                style={{ transition: "fill-opacity 180ms ease" }}
+                style={{ transition: "fill-opacity 150ms ease-in-out" }}
               />
               {exterior && veils && (
                 <polygon
-                  points={bandOf(overlay.puntos, narrow).map((point) => point.join(",")).join(" ")}
+                  points={markerQuad(overlay.puntos).map((point) => point.join(",")).join(" ")}
                   fill={color}
-                  fillOpacity={hovered ? 0.92 : on ? 0.78 : 0.12}
+                  fillOpacity={0.7}
                   stroke="none"
-                  vectorEffect="non-scaling-stroke"
-                  style={{ transition: "fill-opacity 180ms ease" }}
                   pointerEvents="none"
                 />
               )}
@@ -992,7 +1134,18 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img src={walk[(sceneIndex - 1 + walk.length) % walk.length]?.imagen_url} alt="" className="pointer-events-none absolute h-px w-px opacity-0" />
       )}
-      {cardUnit && !active && (
+      {!entered && walk[0]?.imagen_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={walk[0].imagen_url} alt="" className="pointer-events-none absolute h-px w-px opacity-0" />
+      )}
+      {towerCard && !active && (
+        <div className="building-card" data-testid="building-card" style={{ left: towerCard.x, top: towerCard.y }}>
+          <p>{data.project.nombre}</p>
+          <button type="button" className="enter-btn" onClick={() => { forgetCard(); goPlans(); }}>Ingresar</button>
+        </div>
+      )}
+      {chip && disp && !narrow && !active && <div className="code-chip" style={{ left: chip.x, top: chip.y }}>{chip.label}</div>}
+      {cardUnit && !active && !(disp && phase === "escena" && !narrow) && (
         <HoverCard
           unit={cardUnit}
           x={card?.x ?? 0}
@@ -1043,14 +1196,48 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
             <>
               <button type="button" className={filterPop ? "pill on filtros-compact" : "pill filtros-compact"} onClick={() => setFilterPop(filterPop === "menu" ? null : "menu")}>Filtros</button>
               <span className="filtros-full">
-                <button type="button" className={filterPop === "area" ? "pill on" : "pill"} onClick={() => setFilterPop(filterPop === "area" ? null : "area")}>Filtrar área</button>
-                <button type="button" className={filterPop === "estado" ? "pill on" : "pill"} onClick={() => setFilterPop(filterPop === "estado" ? null : "estado")}>Filtrar disponibilidad</button>
-                <button type="button" className={filterPop === "dorm" ? "pill on" : "pill"} onClick={() => setFilterPop(filterPop === "dorm" ? null : "dorm")}>Filtrar dormitorios</button>
+                <span className="pill-slot">
+                  <button type="button" className={areaActive || filterPop === "area" ? "pill picked" : "pill"} onClick={() => setFilterPop(filterPop === "area" ? null : "area")}>Filtrar área</button>
+                  {filterPop === "area" && (
+                    <div className="pop under">
+                      <p className="mb-2 text-sm font-medium">Área</p>
+                      <input type="range" min={areaBound.min} max={areaBound.max} step="0.1" value={areaMin} onChange={(event) => setArea({ min: Math.min(Number(event.target.value), areaMax), max: areaMax })} className="w-full" />
+                      <input type="range" min={areaBound.min} max={areaBound.max} step="0.1" value={areaMax} onChange={(event) => setArea({ min: areaMin, max: Math.max(Number(event.target.value), areaMin) })} className="mt-1 w-full" />
+                      <p className="mt-2 text-sm text-[#5c564e]">{areaMin.toFixed(1)} – {areaMax.toFixed(1)} m²</p>
+                    </div>
+                  )}
+                </span>
+                <span className="pill-slot">
+                  <button type="button" className={estados.length || filterPop === "estado" ? "pill picked" : "pill"} onClick={() => setFilterPop(filterPop === "estado" ? null : "estado")}>Filtrar disponibilidad{estados.length ? ` (${estados.length})` : ""}</button>
+                  {filterPop === "estado" && (
+                    <div className="pop under">
+                      {([["vendida", "Vendido"], ["reservada", "Reservado"], ["disponible", "Disponible"]] as const).map(([value, label]) => (
+                        <label key={value} className="check">
+                          <input type="checkbox" checked={estados.includes(value)} onChange={() => setEstados((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value])} />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </span>
+                <span className="pill-slot">
+                  <button type="button" className={dorms.length || filterPop === "dorm" ? "pill picked" : "pill"} onClick={() => setFilterPop(filterPop === "dorm" ? null : "dorm")}>Filtrar dormitorios{dorms.length ? ` (${dorms.length})` : ""}</button>
+                  {filterPop === "dorm" && (
+                    <div className="pop under">
+                      {["1", "2", "3"].map((value) => (
+                        <label key={value} className="check">
+                          <input type="checkbox" checked={dorms.includes(value)} onChange={() => setDorms((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value])} />
+                          {value}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </span>
               </span>
             </>
           ) : (
             <>
-              <button type="button" className={phase === "escena" && !disp ? "pill on" : "pill"} onClick={() => { setDisponibilidad(false); const index = walk.findIndex((item) => item.tipo === "aereo" || item.tipo === "exterior"); setEntered(true); setPhase("escena"); setUnitId(null); if (index >= 0) setSceneIndex(index); }}>{lang === "en" ? "Aerial view" : "Vista aérea"}</button>
+              <button type="button" className={phase === "escena" && !disp ? "pill on" : "pill"} onClick={goAerial}>{lang === "en" ? "Aerial view" : "Vista aérea"}</button>
               {building && building.floors[0] && <button type="button" className={phase === "planta" ? "pill on" : "pill"} onClick={() => { setDisponibilidad(false); goPlans(); }}>{lang === "en" ? "View plans" : "Ver plantas"}</button>}
               <button type="button" className="pill" onClick={() => setSheet("galeria")}>{lang === "en" ? "Gallery" : "Galería"}</button>
             </>
@@ -1058,33 +1245,6 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           <button type="button" aria-label="Pantalla completa" className="round" onClick={() => { if (!document.fullscreenElement) void document.documentElement.requestFullscreen(); else void document.exitFullscreen(); }}>
             <FullIcon />
           </button>
-          {disp && phase === "escena" && filterPop === "area" && (
-            <div className="pop">
-              <p className="mb-2 text-sm font-medium">Área</p>
-              <input type="range" min={areaBound.min} max={areaBound.max} step="0.1" value={areaMin} onChange={(event) => setArea({ min: Math.min(Number(event.target.value), areaMax), max: areaMax })} className="w-full" />
-              <input type="range" min={areaBound.min} max={areaBound.max} step="0.1" value={areaMax} onChange={(event) => setArea({ min: areaMin, max: Math.max(Number(event.target.value), areaMin) })} className="mt-1 w-full" />
-              <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                <label>Mínimo
-                  <input value={areaMin.toFixed(2)} onChange={(event) => setArea({ min: Number(event.target.value) || areaBound.min, max: areaMax })} className="mt-1 w-full rounded-full border border-[#e6e0d8] px-3 py-1" />
-                  <span className="text-[#8a8178]"> m²</span>
-                </label>
-                <label>Máximo
-                  <input value={areaMax.toFixed(2)} onChange={(event) => setArea({ min: areaMin, max: Number(event.target.value) || areaBound.max })} className="mt-1 w-full rounded-full border border-[#e6e0d8] px-3 py-1" />
-                  <span className="text-[#8a8178]"> m²</span>
-                </label>
-              </div>
-            </div>
-          )}
-          {disp && phase === "escena" && filterPop === "estado" && (
-            <div className="pop">
-              {([["vendida", "Vendido"], ["reservada", "Reservado"], ["disponible", "Disponible"]] as const).map(([value, label]) => (
-                <label key={value} className="radio" onClick={() => setFilters({ ...filters, estado: filters.estado === value ? "todos" : value })}>
-                  <input type="radio" name="estado" readOnly checked={filters.estado === value} />
-                  {label}
-                </label>
-              ))}
-            </div>
-          )}
           {disp && phase === "escena" && filterPop === "menu" && (
             <div className="pop filtros-pop">
               <p className="mb-2 text-sm font-medium">Área</p>
@@ -1093,25 +1253,15 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
               <p className="mt-2 text-sm text-[#5c564e]">{areaMin.toFixed(1)} m² – {areaMax.toFixed(1)} m²</p>
               <p className="mb-1 mt-3 text-sm font-medium">Disponibilidad</p>
               {([["vendida", "Vendido"], ["reservada", "Reservado"], ["disponible", "Disponible"]] as const).map(([value, label]) => (
-                <label key={value} className="radio" onClick={() => setFilters({ ...filters, estado: filters.estado === value ? "todos" : value })}>
-                  <input type="radio" name="estado-menu" readOnly checked={filters.estado === value} />
+                <label key={value} className="check">
+                  <input type="checkbox" checked={estados.includes(value)} onChange={() => setEstados((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value])} />
                   {label}
                 </label>
               ))}
               <p className="mb-1 mt-3 text-sm font-medium">Dormitorios</p>
               {["1", "2", "3"].map((value) => (
-                <label key={value} className="radio" onClick={() => setDorm(dorm === value ? "todos" : value)}>
-                  <input type="radio" name="dorm-menu" readOnly checked={dorm === value} />
-                  {value}
-                </label>
-              ))}
-            </div>
-          )}
-          {disp && phase === "escena" && filterPop === "dorm" && (
-            <div className="pop">
-              {["1", "2", "3"].map((value) => (
-                <label key={value} className="radio" onClick={() => setDorm(dorm === value ? "todos" : value)}>
-                  <input type="radio" name="dorm" readOnly checked={dorm === value} />
+                <label key={value} className="check">
+                  <input type="checkbox" checked={dorms.includes(value)} onChange={() => setDorms((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value])} />
                   {value}
                 </label>
               ))}
@@ -1122,9 +1272,9 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
 
       {veils && !active && (
         <div className="legend" data-testid="legend">
-          <span><i style={{ background: "#1f8a5b" }} />Disponible</span>
-          <span><i style={{ background: "#c49214" }} />Reservada</span>
-          <span><i style={{ background: "#b42318" }} />Vendida</span>
+          <span><i style={{ background: STATUS_COLOR.disponible }} />Disponible {data.units.filter((unit) => unit.estado === "disponible" && unit.tipo === "departamento").length}</span>
+          <span><i style={{ background: STATUS_COLOR.reservada }} />Reservada {data.units.filter((unit) => unit.estado === "reservada" && unit.tipo === "departamento").length}</span>
+          <span><i style={{ background: STATUS_COLOR.vendida }} />Vendida {data.units.filter((unit) => unit.estado === "vendida" && unit.tipo === "departamento").length}</span>
         </div>
       )}
 
@@ -1147,27 +1297,27 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
         </div>
       )}
 
-      {showRail && tower && (
-        <label className="floor-pick">
-          <select aria-label="Planta" value={floorId ?? ""} onChange={(event) => openFloor(event.target.value, "replace")}>
-            {tower.floors.map((item) => (
-              <option key={item.id} value={item.id}>{`Piso ${floorMark(item.nombre, item.numero)}`}</option>
-            ))}
-          </select>
-        </label>
-      )}
+      {hint && phase === "planta" && !active && <p className="swipe-hint">Deslizá hacia los laterales</p>}
 
-      {showRail && tower && (
-        <aside className="floor-rail absolute right-3 top-1/2 z-20 flex max-h-[78vh] -translate-y-1/2 flex-col gap-0.5 overflow-auto rounded-full px-1.5 py-2" data-testid="floor-rail">
+      {showRail && tower && railOpen && (
+        <aside className="floor-rail" data-testid="floor-rail">
+          <button type="button" className="rail-close" aria-label="Ocultar plantas" onClick={() => setRailOpen(false)}>×</button>
           {tower.floors.map((item) => {
             const current = item.id === floorId;
             return (
-              <button key={item.id} type="button" title={`${item.libres} libres`} className={current ? "on" : ""} onClick={() => openFloor(item.id, "replace")}>
+              <button key={item.id} type="button" title={`${item.libres} libres`} className={current ? "level on" : "level"} onClick={() => openFloor(item.id, "replace")}>
                 {floorMark(item.nombre, item.numero)}
               </button>
             );
           })}
         </aside>
+      )}
+      {showRail && !railOpen && (
+        <button type="button" className="layers-btn" aria-label="Mostrar plantas" onClick={() => setRailOpen(true)}>
+          <span />
+          <span />
+          <span />
+        </button>
       )}
 
       {active && (
@@ -1190,6 +1340,7 @@ export function ShowroomApp({ data }: { data: ShowroomData }) {
           setPhoto={setPhoto}
           onClose={stepBack}
           onChangeFloor={stepBack}
+          onLocate={locateOnPlan}
           onWhatsapp={() => whatsapp(active)}
           onShare={() => void share(active)}
           onLead={submitLead}
@@ -1385,6 +1536,11 @@ function Stage({
   pan,
   soft = false,
   plate = null,
+  layout = "auto",
+  drop = 0,
+  haze = false,
+  arrive = false,
+  settle = false,
   backdrop = null,
   marks = [],
   video,
@@ -1407,6 +1563,11 @@ function Stage({
   pan: { x: number; y: number };
   soft?: boolean;
   plate?: { x0: number; y0: number; x1: number; y1: number } | null;
+  layout?: "auto" | "slab" | "tall";
+  drop?: number;
+  haze?: boolean;
+  arrive?: boolean;
+  settle?: boolean;
   backdrop?: string | null;
   marks?: { id: string; x: number; y: number; color: string; label: string; dim: boolean }[];
   video: string | null;
@@ -1444,11 +1605,15 @@ function Stage({
     node.addEventListener("wheel", listener, { passive: false });
     return () => node.removeEventListener("wheel", listener);
   }, [onWheel, stageRef]);
-  const frame = plate
-    ? plateFrame(box.w, box.h, natural.w, natural.h, plate)
-    : cover
-      ? coverFrame(box.w, box.h, natural.w, natural.h, focus.x, focus.y, shift)
-      : contain(box.w, box.h, natural.w, natural.h);
+  const frame = layout === "tall"
+    ? coverHeightFrame(box.w, box.h, natural.w, natural.h, plate)
+    : layout === "slab"
+      ? slabFrame(box.w, box.h, natural.w, natural.h, drop)
+      : plate
+        ? plateFrame(box.w, box.h, natural.w, natural.h, plate)
+        : cover
+          ? coverFrame(box.w, box.h, natural.w, natural.h, focus.x, focus.y, shift)
+          : contain(box.w, box.h, natural.w, natural.h);
   return (
     <div
       ref={stageRef}
@@ -1461,10 +1626,11 @@ function Stage({
     >
       {backdrop && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={backdrop} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-cover" style={{ filter: "blur(18px) brightness(0.42)", transform: "scale(1.08)" }} />
+        <img src={backdrop} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-cover" style={{ filter: "blur(6px) saturate(0.6)", transform: "scale(1.08)" }} />
       )}
+      {haze && <div className="stage-haze" />}
       <div
-        className="absolute"
+        className={arrive ? "absolute arrive-frame" : "absolute"}
         style={{
           left: frame.left,
           top: frame.top,
@@ -1479,7 +1645,7 @@ function Stage({
           key={src}
           src={src}
           alt=""
-          className={`stage-fade h-full w-full object-fill ${soft ? "stage-soft" : ""}`}
+          className={`stage-fade h-full w-full object-fill ${soft ? "stage-soft" : ""} ${layout === "slab" ? "slab-photo" : ""} ${settle ? "settle" : ""}`}
           draggable={false}
           onLoad={(event) => {
             const img = event.currentTarget;

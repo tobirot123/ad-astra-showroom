@@ -1674,7 +1674,8 @@ export function addMedia(
     carpeta: string;
     unitId?: string | null;
     typologyId?: string | null;
-    rol?: "render" | "plano" | "portada" | "fachada" | "vista";
+    floorId?: string | null;
+    rol?: "render" | "plano" | "portada" | "fachada" | "vista" | "corte";
     now: Date;
   },
 ): OpResult {
@@ -1697,7 +1698,10 @@ export function addMedia(
     tags: [input.carpeta],
     created_at: input.now.toISOString(),
   });
-  if (input.unitId) {
+  if (input.floorId && input.rol === "corte") {
+    db.media_links = db.media_links.filter((link) => !(link.entidad === "floor" && link.entidad_id === input.floorId && link.rol === "corte"));
+    db.media_links.push({ id: uid(), media_id: id, entidad: "floor", entidad_id: input.floorId, rol: "corte", orden: 0 });
+  } else if (input.unitId) {
     db.media_links.push({ id: uid(), media_id: id, entidad: "unit", entidad_id: input.unitId, rol: input.rol ?? "render", orden: 1 });
   } else if (input.typologyId) {
     db.media_links.push({ id: uid(), media_id: id, entidad: "typology", entidad_id: input.typologyId, rol: input.rol ?? "render", orden: 1 });

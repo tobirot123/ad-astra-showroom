@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { poiColor } from "@/lib/domain/poi";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -29,6 +29,7 @@ export function PoiMap({ lat, lng, nombre, pois, selectedId, onSelect, onPick, c
   const node = useRef<HTMLDivElement>(null);
   const onSelectRef = useRef(onSelect);
   const onPickRef = useRef(onPick);
+  const [down, setDown] = useState(false);
   onSelectRef.current = onSelect;
   onPickRef.current = onPick;
 
@@ -87,7 +88,15 @@ export function PoiMap({ lat, lng, nombre, pois, selectedId, onSelect, onPick, c
             onPickRef.current?.(event.latLng.lat(), event.latLng.lng());
           })
         : null;
+      const fit = () => {
+        const api = window.google?.maps as { event?: { trigger: (target: unknown, name: string) => void } } | undefined;
+        api?.event?.trigger(map, "resize");
+      };
+      const observer = new ResizeObserver(() => fit());
+      observer.observe(root);
+      window.setTimeout(fit, 300);
       cleanup = () => {
+        observer.disconnect();
         home.setMap(null);
         markers.forEach((marker) => marker.setMap(null));
         line?.setMap(null);
@@ -99,6 +108,10 @@ export function PoiMap({ lat, lng, nombre, pois, selectedId, onSelect, onPick, c
     async function mountLibre() {
       const maplibregl = await import("maplibre-gl");
       if (cancelled || !root) return;
+      root.style.position = "absolute";
+      root.style.inset = "0";
+      root.style.width = "100%";
+      root.style.height = "100%";
       const map = new maplibregl.Map({
         container: root,
         style: {
@@ -150,7 +163,18 @@ export function PoiMap({ lat, lng, nombre, pois, selectedId, onSelect, onPick, c
       if (onPickRef.current) {
         map.on("click", (event) => onPickRef.current?.(event.lngLat.lat, event.lngLat.lng));
       }
+      const fit = () => {
+        root.style.position = "absolute";
+        root.style.height = "100%";
+        root.style.width = "100%";
+        map.resize();
+      };
+      map.on("load", fit);
+      const observer = new ResizeObserver(() => fit());
+      observer.observe(root);
+      window.setTimeout(fit, 300);
       cleanup = () => {
+        observer.disconnect();
         markers.forEach((marker) => marker.remove());
         map.remove();
       };
@@ -165,7 +189,11 @@ export function PoiMap({ lat, lng, nombre, pois, selectedId, onSelect, onPick, c
           /* sin red o clave inválida: OpenStreetMap */
         }
       }
-      await mountLibre();
+      try {
+        await mountLibre();
+      } catch {
+        if (!cancelled) setDown(true);
+      }
     })();
 
     return () => {
@@ -174,7 +202,15 @@ export function PoiMap({ lat, lng, nombre, pois, selectedId, onSelect, onPick, c
     };
   }, [lat, lng, nombre, pois, selectedId]);
 
-  return <div ref={node} className={className ?? "h-72 w-full overflow-hidden rounded-2xl"} />;
+  const pad = 0.02;
+  const embed = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(`${lng - pad},${lat - pad},${lng + pad},${lat + pad}`)}&layer=mapnik&marker=${lat}%2C${lng}`;
+  const positioned = Boolean(className?.includes("absolute"));
+  return (
+    <div className={className ?? "h-72 w-full overflow-hidden rounded-2xl"} style={{ position: positioned ? "absolute" : "relative", minHeight: positioned ? "100%" : undefined }}>
+      <div ref={node} className="absolute inset-0" style={{ background: "#e7efe9" }} />
+      {down && <iframe title={`Mapa de ${nombre}`} src={embed} className="absolute inset-0 h-full w-full border-0 bg-[#e7efe9]" />}
+    </div>
+  );
 }
 
 function loadGoogle(key: string) {

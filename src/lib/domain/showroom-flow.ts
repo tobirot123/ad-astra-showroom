@@ -51,6 +51,17 @@ export function tourEmbed(proveedor: string, url: string): "iframe" | "panorama"
   return "iframe";
 }
 
+/** Filtros de fachada: OR dentro de cada grupo y AND entre grupos. El área es un rango. */
+export function facadeMatch(
+  unit: { estado: string; dormitorios: number | null; m2_totales: number | null },
+  query: { estados: string[]; dorms: string[]; areaMin: number; areaMax: number; areaOn: boolean },
+): boolean {
+  if (query.estados.length && !query.estados.includes(unit.estado)) return false;
+  if (query.dorms.length && !query.dorms.includes(String(unit.dormitorios ?? ""))) return false;
+  if (query.areaOn && unit.m2_totales != null && (unit.m2_totales < query.areaMin || unit.m2_totales > query.areaMax)) return false;
+  return true;
+}
+
 export function unitMatches(unit: FlowUnit, filters: FlowFilters): boolean {
   if (filters.estado !== "todos" && unit.estado !== filters.estado) return false;
   if (filters.ambientes !== "todos" && String(unit.ambientes ?? "") !== filters.ambientes) return false;
@@ -68,6 +79,14 @@ export function sortUnits<T extends FlowUnit>(units: T[], sort: FlowFilters["sor
     return a.piso_numero - b.piso_numero || a.codigo.localeCompare(b.codigo, "es");
   });
   return copy;
+}
+
+/** Ver plantas abre el nivel más alto que tiene imagen: techo, azotea o el último piso. */
+export function entryFloor<T extends { numero: number; plano?: string | null }>(floors: T[]): T | null {
+  const drawn = floors.filter((floor) => floor.plano);
+  const homes = drawn.filter((floor) => floor.numero >= 1 && floor.numero < 19);
+  const pool = homes.length ? homes : drawn.length ? drawn : floors;
+  return pool.slice().sort((a, b) => b.numero - a.numero)[0] ?? null;
 }
 
 /** La primera planta residencial: el piso más bajo con unidades libres, si no el piso 1. */

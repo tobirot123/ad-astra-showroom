@@ -326,7 +326,7 @@ export interface MediaLink {
   media_id: string;
   entidad: "typology" | "unit" | "project" | "floor" | "building" | "amenity";
   entidad_id: string;
-  rol: "render" | "plano" | "portada" | "fachada" | "video" | "galeria" | "acabado" | "tour" | "brochure" | "vista";
+  rol: "render" | "plano" | "portada" | "fachada" | "video" | "galeria" | "acabado" | "tour" | "brochure" | "vista" | "corte";
   orden: number;
   titulo?: string | null;
   descripcion?: string;

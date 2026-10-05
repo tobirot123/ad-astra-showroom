@@ -232,6 +232,7 @@ export function buildShowroom(db: Database, slug: string) {
             numero: floor.numero,
             clave: floorKey(floor.numero),
             plano: urlsFor(db, links, "plano")[0] ?? null,
+            corte: urlsFor(db, links, "corte")[0] ?? null,
             vista: urlsFor(db, links, "vista")[0] ?? null,
             libres: units.filter((unit) => unit.floor_id === floor.id && unit.estado === "disponible").length,
           };
