@@ -914,8 +914,9 @@
     left: 0;
     right: auto;
     top: 2.8rem;
-    max-height: min(24rem, 60vh);
-    overflow: auto;
+    max-height: calc(100dvh - 12rem);
+    overflow-y: auto;
+    padding-bottom: 0.85rem;
   }
 
   .showroom .floor-rail {
