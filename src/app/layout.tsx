@@ -1,11 +1,17 @@
 import type { Metadata } from "next"
 import type { ReactNode } from "react"
-import { Cormorant_Garamond, Outfit } from "next/font/google"
+import { Barlow_Condensed, Cormorant_Garamond, Outfit } from "next/font/google"
 import "./globals.css"
 
 const sans = Outfit({
   subsets: ["latin"],
   variable: "--font-sans",
+})
+
+const nums = Barlow_Condensed({
+  subsets: ["latin"],
+  weight: ["600"],
+  variable: "--font-num",
 })
 
 const serif = Cormorant_Garamond({
@@ -22,7 +28,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es-AR">
-      <body className={`${sans.variable} ${serif.variable}`}>{children}</body>
+      <body className={`${sans.variable} ${serif.variable} ${nums.variable}`}>{children}</body>
     </html>
   )
 }

@@ -124,14 +124,14 @@ button { cursor: pointer; }
   cursor: pointer;
 }
 .lot-num {
-  fill: #f7f4ec;
-  stroke: rgba(14, 22, 16, 0.82);
-  paint-order: stroke;
-  font-family: var(--sans);
-  font-weight: 650;
+  fill: #fffef8;
+  stroke: #101712;
+  paint-order: stroke fill;
+  font-family: var(--font-num), "Arial Narrow", Impact, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   pointer-events: none;
 }
-.lot-dot { pointer-events: none; fill: #f7f4ec; stroke: rgba(14, 22, 16, 0.7); }
 
 .hud {
   position: absolute;

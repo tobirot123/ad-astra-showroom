@@ -299,9 +299,14 @@ export function HavApp({ initialLote }: { initialLote?: number | null }) {
               const hot = hover === lote || selected === lote
               const box = bounds(points)
               const [cx, cy] = centroid(points)
-              const font = Math.max(11, Math.min(22, Math.min(box.width, box.height) * 0.4))
-              const readable = font * view.z >= 11 || hot
-              const drawFont = hot && font * view.z < 13 ? Math.max(font, 14 / view.z) : font
+              const z = Math.max(view.z, 0.05)
+              // Mismo cuerpo para 1, 2 o 3 cifras, medido para que entre en el lote.
+              const byWidth = (box.width * 0.92) / 1.5
+              const byHeight = box.height * 0.62
+              const fitScreen = Math.min(byWidth, byHeight) * z
+              const screenPx = Math.min(hot ? 26 : 18, Math.max(8, fitScreen))
+              const drawFont = screenPx / z
+              const strokePx = screenPx <= 9 ? 0.65 : 1.05
               const fill = showAvailabilityColors
                 ? availabilityFill(data, hot)
                 : hot
@@ -315,25 +320,21 @@ export function HavApp({ initialLote }: { initialLote?: number | null }) {
                     data-testid={`lot-${lote}`}
                     points={points.map((point) => point.join(",")).join(" ")}
                     fill={fill}
-                    stroke={hot ? "#f6f1e7" : "rgba(255, 250, 242, 0.42)"}
+                    stroke={hot ? "#f6f1e7" : "rgba(255, 250, 242, 0.28)"}
                     strokeWidth={hot ? 2.4 / view.z : 1.1 / view.z}
                     aria-label={`Lote ${lote}`}
                   />
-                  {readable ? (
-                    <text
-                      className="lot-num"
-                      x={cx}
-                      y={cy}
-                      textAnchor="middle"
-                      dominantBaseline="central"
-                      fontSize={drawFont}
-                      strokeWidth={Math.max(0.6, 1.4 / view.z)}
-                    >
-                      {lote}
-                    </text>
-                  ) : (
-                    <circle className="lot-dot" cx={cx} cy={cy} r={3.2 / view.z} strokeWidth={1 / view.z} />
-                  )}
+                  <text
+                    className="lot-num"
+                    x={cx}
+                    y={cy}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={drawFont}
+                    strokeWidth={(hot ? strokePx + 0.45 : strokePx) / z}
+                  >
+                    {lote}
+                  </text>
                 </g>
               )
             })}
